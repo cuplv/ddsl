@@ -8,6 +8,7 @@ module Ddsl.Prelude
   , module Ddsl.Ext.Nat
   , module Ddsl.Ext.Set
   , module Ddsl.Ext.CardSet
+  , defaultConfig
   , Bool
   , ($)
   , (==)
@@ -97,3 +98,6 @@ type Df6 a b c d e f g = forall x. (Avs x) => Alp x a -> Alp x b -> Alp x c -> A
 type Df7 a b c d e f g h = forall x. (Avs x) => Alp x a -> Alp x b -> Alp x c -> Alp x d -> Alp x e -> Alp x f -> Alp x g -> Alp x h
 
 type Df8 a b c d e f g h i = forall x. (Avs x) => Alp x a -> Alp x b -> Alp x c -> Alp x d -> Alp x e -> Alp x f -> Alp x g -> Alp x h -> Alp x i
+
+defaultConfig :: SolverConfig
+defaultConfig = mempty

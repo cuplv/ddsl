@@ -20,6 +20,7 @@ module Ddsl
   , showSMT
   , VerifyResult (..)
   , showResultSeconds
+  , evaluate
   , module Ddsl.Base
   , module Ddsl.Base.Bool
   , module Ddsl.Base.Tuple

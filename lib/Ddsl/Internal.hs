@@ -373,3 +373,6 @@ verifyA' config program = do
     baseConfig = case useSolver config of
       Just s -> s
       Nothing -> defaultSMTCfg
+
+evaluate :: (Avs a, Avs b) => (Alp a a -> Alp a b) -> a -> b
+evaluate f = alpFun (f AlpId)
