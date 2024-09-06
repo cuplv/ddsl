@@ -1,0 +1,55 @@
+cabal-version:      2.4
+name:               ddsl
+version:            0.1.0.0
+license:            MIT
+license-file:       LICENSE
+author:             Nicholas V. Lewchenko
+maintainer:         contact@octalsrc.org
+
+library
+    exposed-modules:
+        Ddsl.Prelude
+        Ddsl.Example.Election
+    other-modules:
+        Ddsl,
+        Ddsl.Atom,
+        Ddsl.Base,
+        Ddsl.Base.Tuple,
+        Ddsl.Base.Bool,
+        Ddsl.Internal,
+        Ddsl.Symbolic,
+        Ddsl.Term,
+        Ddsl.TH,
+        Ddsl.Ext.Accum,
+        Ddsl.Ext.Accum.Class,
+        Ddsl.Ext.Accum.Example,
+        Ddsl.Ext.Accum.TH,
+        Ddsl.Ext.CardSet,
+        Ddsl.Ext.CardSet.Example,
+        Ddsl.Ext.CardSet.Internal,
+        Ddsl.Ext.ForallCheck,
+        Ddsl.Ext.List,
+        Ddsl.Ext.List.Example,
+        Ddsl.Ext.Map,
+        Ddsl.Ext.Map.Class,
+        Ddsl.Ext.Map.Example,
+        Ddsl.Ext.Map.Filter,
+        Ddsl.Ext.Map.TH,
+        Ddsl.Ext.Nat,
+        Ddsl.Ext.Nat.Class,
+        Ddsl.Ext.Nat.Example,
+        Ddsl.Ext.Nat.TH,
+        Ddsl.Ext.Set,
+        Ddsl.Ext.Set.Class,
+        Ddsl.Ext.Set.Example,
+        Ddsl.Ext.Set.Filter,
+        Ddsl.Ext.Set.TH
+    build-depends:
+        base >=4.17.2 && <4.19,
+        sbv >=10.7 && <10.13,
+        containers,
+        syb,
+        time,
+        template-haskell
+    hs-source-dirs:   lib
+    default-language: Haskell2010
