@@ -1,3 +1,5 @@
+-- The following GHC language extensions are used to create symbolic
+-- representations of the types in this example.
 {-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE FlexibleInstances #-}
@@ -8,219 +10,213 @@
 
 module Ddsl.Example.Election where
 
+-- This loads the Ddsl embedded language.
 import Ddsl.Prelude
 
 -- Don't import everything from standard Haskell prelude, since we
 -- replace several boolean operators.
 import Prelude (print,putStr,(=<<))
 
+
+-----------
+-- TYPES --
+-----------
+
+-- A node identifier (which is just an 'Int').
 data NodeId = NodeId Int deriving (Show,Eq,Ord)
+-- Declare a symbolic representation for 'NodeId'.
 mkDType "NodeId" ''NodeId
+
+-- A set of nodes eligible to vote.
+type Voters = Set NodeId
+-- Declare a symbolic representation for sets of 'NodeID's.
 mkSetMd "NodeId" ''NodeId
 
-type VoteMap = Map NodeId NodeId
-
+-- A record of votes, mapping each node that has voted to its chosen
+-- candidate.
+type Votes = Map NodeId NodeId
+-- Declare a symbolic representation for 'NodeID' -> 'NodeId' maps.
 mkMapMd "NodeId_NodeId" ''NodeId ''NodeId
 
-
--- A set of replicas eligible to vote.
-type Voters = Set NodeId
--- A map of each replica that has voted to its chosen candidate.
-type Votes = Map NodeId NodeId
--- The replicated state. Each replica holds a copy.
+-- The replicated state. Each node holds a copy.
 type EState = (Voters, Votes)
--- A vote message: simply a new voter-candidate mapping.
-type VoteMsg = (NodeId, NodeId)
 
-{- | A local state query that checks if a given replica has been
-   elected. -}
+-- A vote update: simply a new voter-candidate mapping.  The voter is
+-- the node that produces the update, and the candidate is the node
+-- identified by the update value.
+type Update = NodeId
+
+
+--------------
+-- PROTOCOL --
+--------------
+
+-- Election nodes can perform one kind of update to the replicated
+-- state: issuing a vote.  This update takes effect immediately at the
+-- origin node, and later takes effect at each remote node as it is
+-- delivered by the network.
+--
+-- For every update, we define a precondition that must hold for the
+-- origin node's local state when it creates the update.  We will show
+-- through verification that, as long as the runtime enforces the
+-- preconditions locally, they will also hold for every remote state
+-- that they are applied to.
+
+-- The effect of an update.  The first 'NodeId' argument is the origin
+-- node that produced the update.
+--
+-- The 'Df3' type is the type of Ddsl functions with 3 arguments.
+updateEffect :: Df3 NodeId Update EState EState
+updateEffect voter cand state =
+  -- Unpack eligible voters and existing votes from the pre-state.
+  from2' state $ \allVoters allVotes ->
+
+  -- Construct the post-state,
+  tup2
+    -- using the same set of eligible voters,
+    allVoters
+    -- and adding the new vote to the existing votes.
+    (insertMap voter cand allVotes)
+
+-- The local precondition that permits issuing a vote update.
+--
+-- We will verify that this guard, if true for the update's origin
+-- state, must also be true for any remote state that it is delivered
+-- into.
+updatePre :: Df3 NodeId Update EState Bool
+updatePre voter cand state =
+  -- Unpack existing votes from state
+  from2' state $ \_ allVotes ->
+  -- Check that the voter has not yet voted.
+  keyNull voter allVotes
+
+
+-----------------
+-- SAFETY SPEC --
+-----------------
+
+-- The safety condition we want to verify is that once any node
+-- observes an elected leader, it will always continue to observe that
+-- same elected leader.
+--
+-- We specify this as a preorder 'monoLeader' on node states, and
+-- verify that each node's state is monotonically increasing according
+-- to that preorder.
+monoLeader :: Df3 NodeId EState EState Bool
+monoLeader leader s1 s2 =
+  isElected leader s1 ==> isElected leader s2
+
+-- A local state query that checks if a given node has been elected as
+-- the leader.
 isElected :: Df2 NodeId EState Bool
 isElected cand state =
   from2' state $ \allVoters allVotes ->
-  quorum
-    -- The set of nodes that have voted for cand ...
-    (selectV cand allVotes)
-    -- ... includes a quorum of the nodes eligible to vote.
-    allVoters
-
-voteGen :: Df3 NodeId EState NodeId (Bool, VoteMsg)
-voteGen self state cand =
-  keyNull self (sndE state)
-  &&& (tup2 self cand)
-
-voteGenTest :: Df ((NodeId,EState,NodeId),(NodeId)) Bool
-voteGenTest args =
-  from2' args $ \concrete abstract ->
-  from3' concrete $ \self state arg ->
-  letb (voteGen self state arg) $ \result ->
-  from2' result $ \ok msg ->
-
-  (ok) $=>
-  (voteGuard abstract self msg state)
-
-{- | The effect of the vote message.
-
-   This is used to modify the origin replica's state, as well as the
-   states of every replica that the message is delivered to. -}
-voteEffect :: Df2 VoteMsg EState EState
-voteEffect msg state =
-  -- Unpack voter and cand from msg
-  from2' msg $ \voter cand ->
-  -- Unpack eligible voters and existing votes from state
-  from2' state $ \allVoters allVotes ->
-
-  -- Construct the post-state tuple
-  tup2
-    -- Using the same set of eligible voters
-    allVoters
-    -- And the new vote added to the existing votes
-    (insertMap voter cand allVotes)
+  -- Check that the set of nodes that have voted for cand ...
+  selectV cand allVotes
+  -- ... is a quorum (majority) of ...
+  `quorum`
+  -- ... the set of all eligible voter.
+  allVoters
 
 
-{- | The local guard that permits issuing a vote message.
+-----------------------------
+-- VERIFICATION CONDITIONS --
+-----------------------------
 
-   We will verify that this guard, if true for the message's origin
-   state, must also be true for any remote state that it is delivered
-   into. -}
-voteGuard :: Df4 NodeId NodeId VoteMsg EState Bool
-voteGuard _ selfId myMsg myState =
-  -- Unpack voter and cand from msg
-  from2' myMsg $ \voter cand ->
-  -- Unpack eligible voters and existing votes from state
-  from2' myState $ \allVoters allVotes ->
-
-  -- Check that the replica is voting in its own name
-  (voter == selfId)
-  -- And that it has not yet voted
-  && keyNull selfId allVotes
-
-
-{- | The safety goal is a relation on two states, which requires that
-   the two states do not witness two different replicas having been
-   elected.  This is an example of a consensus property.
-
-   The goal property is written with respect to an arbitrary pair of
-   replica IDs, which are universally quantified for verification. -}
-safetyGoal :: Df3 (NodeId,NodeId) EState EState Bool
-safetyGoal rids s1 s2 =
-  from2' rids $ \r1 r2 ->
-
-  -- It is not the case that ...
-  not $
-    -- ... r1 and r2 are different replicas and ...
-    (r1 /= r2)
-    -- ... one has been elected in the first state ...
-    && isElected r1 s1
-    -- ... while the other has been elected in the second state.
-    && isElected r2 s2
-
-goal :: Df3 NodeId EState EState Bool
-goal _ s1 s2 =
-  (fstE s1 == fstE s2)
-  && (sndE s1 `submap` sndE s2)
-
-{- | The guarantee is also a relation on two states, but takes a
-   "subnet" parameter (a set of replica IDs) as well.  The guarantee
-   constrains the state changes that the members of the subnet are
-   allowed to make, as group. -}
-guarantee :: (Avs x) => Alp x (NodeId,NodeId) -> Alp x (Set NodeId) -> Alp x EState -> Alp x EState -> Alp x Bool
-guarantee rids subnet s1 s2 =
-  -- The guarantee is written with respect to the same arbitrary pair
-  -- of replica IDs that the safetyGoal refers to.  We will only
-  -- constrain one of them.
-  from2' rids $ \r1 _ ->
-
-  -- Election of the arbitrary candidate is preserved, ...
-  (isElected r1 s1 ==> isElected r1 s2)
-  -- ... and there are no new votes attributed to any replica which is
-  -- not a member of the given subnet.
-  && (unauthorizedVotes == emptyMap)
-
-  where
-    unauthorizedVotes =
-      from2' s1 $ \_ votes1 ->
-      from2' s2 $ \_ votes2 ->
-
-      -- Employ a user-defined map filter.
-      filterMap
-        -- (Give a unique name for the generated uninterpreted
-        -- function.  This could be automated away with some
-        -- engineering work.)
-        "unauthorizedVotes"
-        -- Given the subnet and the first state's votes ...
-        (tup2 subnet votes1)
-        -- ... collect all votes from the second state ...
-        votes2
-        -- ... that are "unauthorized", meaning: ...
-        (\args k v ->
-           from2' args $ \subnet votes1 ->
-           -- ... a vote which is new (not in first state) ...
-           not (keyVal k v votes1)
-           -- ... and attributed to a voter that is not in the subnet.
-           && not (member k subnet))
-
+-- Check that the monotonicity relation is reflexive.
+--
+-- The 'Df' type is the type of Ddsl functions with one argument.  A
+-- single-function argument with 'Bool' serves as a verification
+-- condition, where the argument is universally quantified and the
+-- condition is verified iff the result is always 'True'.
 vc1 :: Df (NodeId, EState) Bool
 vc1 args =
-  from2' args $ \arg s ->
-  goal arg s s
+  from2' args $ \leader s ->
+  monoLeader leader s s
 
+-- Check that the monotonicity relation is transitive.
+--
+-- Being reflexive and transitive, 'monoLeader' is thus a preorder.
 vc2 :: Df (NodeId, (EState, EState, EState)) Bool
 vc2 args =
-  from2' args $ \arg states ->
+  from2' args $ \leader states ->
   from3' states $ \s1 s2 s3 ->
-  (goal arg s1 s2 && goal arg s2 s3)
-  ==> goal arg s1 s3
+  (monoLeader leader s1 s2
+   && monoLeader leader s2 s3)
+  ==> monoLeader leader s1 s3
 
-vc3 :: Df (NodeId, (NodeId, VoteMsg, EState)) Bool
+-- Check that the monotonicity relation is upheld by every update that
+-- is valid (precondition-satisfying).
+vc3 :: Df (NodeId, (NodeId, Update, EState)) Bool
 vc3 args =
-  from2' args $ \arg ps ->
-  from3' ps $ \r m s ->
-  voteGuard arg r m s
-  ==> goal arg s (voteEffect m s)
+  from2' args $ \leader ps ->
+  from3' ps $ \voter cand state1 ->
+  let
+    state2 = updateEffect voter cand state1
+  in
+    -- Assume that the update is valid.
+    updatePre voter cand state1
+    -- Show that the change satisfies the monotonicity property.
+    ==> monoLeader leader state1 state2
 
-vc4 :: Df (NodeId, (NodeId, VoteMsg, NodeId, VoteMsg, EState)) Bool
+-- Check that every update's precondition is "strong": that it is
+-- preserved by any other update that is valid
+-- (precondition-satisfying) and concurrent (distinct origin node).
+vc4 :: Df (NodeId, (NodeId, Update, NodeId, Update, EState)) Bool
 vc4 args =
-  from2' args $ \arg ps ->
-  from5' ps $ \r1 m1 r2 m2 s ->
-  ((r1 /= r2)
-  && voteGuard arg r1 m1 s
-  && voteGuard arg r2 m2 s)
-  ==> voteGuard arg r2 m2 (voteEffect m1 s)
+  from2' args $ \leader ps ->
+  from5' ps $ \origin1 update1 origin2 update2 state1 ->
+  let
+    state2 = updateEffect origin2 update2 state1
+    -- We are checking that this condition is not invalidated by the
+    -- effect of update2.
+    pre1 = updatePre origin1 update1
+  in
+    -- Assume that update2 is valid in state1 (its precondition
+    -- holds),
+    (updatePre origin2 update2 state1
+    -- and that update2 is concurrent with update1 (they have
+    -- distinct origin nodes).
+    && (origin1 /= origin2))
+    -- Show that update1's precondition is not invalidated by update2.
+    ==> (pre1 state1 ==> pre1 state2)
 
-vc5 :: Df (NodeId, (NodeId, VoteMsg, NodeId, VoteMsg, EState)) Bool
+-- Check that updates always commute when they are valid
+-- (precondition-satisfying) and concurrent (distinct origin nodes).
+vc5 :: Df (NodeId, Update, NodeId, Update, EState) Bool
 vc5 args =
-  from2' args $ \arg ps ->
-  from5' ps $ \r1 m1 r2 m2 s ->
-  letb (voteEffect m2 (voteEffect m1 s)) $ \s1 ->
-  letb (voteEffect m1 (voteEffect m2 s)) $ \s2 ->
+  from5' args $ \origin1 update1 origin2 update2 state ->
+  let
+    -- The result of applying update1 and then update2.
+    state12 =
+      updateEffect origin2 update2
+        (updateEffect origin1 update1 state)
+    -- The result of applying update2 and then update1.
+    state21 =
+      updateEffect origin1 update1
+        (updateEffect origin2 update2 state)
+  in
+    -- Assume that the updates are valid,
+    (updatePre origin1 update1 state
+    && updatePre origin2 update2 state
+    -- and that they are concurrent.
+    && (origin1 /= origin2))
+    -- Show that the resulting states are identical.
+    ==> (state12 == state21)
 
-  ((r1 /= r2)
-  && voteGuard arg r1 m1 s
-  && voteGuard arg r2 m2 s)
-  ==> (s1 == s2)
-
-vc6 :: Df (NodeId, NodeId, (EState, EState, EState)) Bool
-vc6 args =
-  from3' args $ \arg1 arg2 ps ->
-  from3' ps $ \s1 s2 s3 ->
-  (goal arg1 s1 s3
-  && goal arg1 s2 s3
-  && goal arg2 s1 s3
-  && goal arg2 s2 s3)
-  ==> safetyGoal (tup2 arg1 arg2) s1 s2
-
-verifyElection conf = do
-  putStr "VC #1. "
-  print =<< verify' conf vc1
-  putStr "VC #2. "
-  print =<< verify' conf vc2
-  putStr "VC #3. "
-  print =<< verify' conf vc3
-  putStr "VC #4. "
-  print =<< verify' conf vc4
-  putStr "VC #5. "
-  print =<< verify' conf vc5
-  putStr "VC #6. "
-  print =<< verify' conf vc6
-  putStr "VC #7. "
-  print =<< verify' conf voteGenTest
+-- Put the conditions all together.  The 'verify' function takes a
+-- verification condition (single-argument function with boolean
+-- output) and checks that it is valid (its negation is unsatisfiable)
+-- using an SMT solver.
+verifyElection :: IO ()
+verifyElection = do
+  putStr "VC #1 (reflexive).  "
+  print =<< verify vc1
+  putStr "VC #2 (transitive). "
+  print =<< verify vc2
+  putStr "VC #3 (monotonic).  "
+  print =<< verify vc3
+  putStr "VC #4 (strong).     "
+  print =<< verify vc4
+  putStr "VC #5 (commutable). "
+  print =<< verify vc5
