@@ -10,6 +10,7 @@ library
     exposed-modules:
         Ddsl.Prelude
         Ddsl.Example.Election
+        Ddsl.Example.SingleConsensus
     other-modules:
         Ddsl,
         Ddsl.Atom,

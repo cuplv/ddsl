@@ -2,6 +2,7 @@
 
 module Ddsl.Ext.ForallCheck
   ( checkForall
+  , universal
   , checkExists
   ) where
 
@@ -73,6 +74,14 @@ checkForall
   -> Alp x a
   -> Alp x Bool
 checkForall n p a = checkForall' (mkForallCheck n p) a
+
+universal
+  :: (Avs x, Avs a, Avs e, QE a e, SMTDefinable (MVFun (Rep a) SBool))
+  => String
+  -> Alp x a
+  -> (Alp (a,e) a -> Alp (a,e) e -> Alp (a,e) Bool)
+  -> Alp x Bool
+universal n a p = checkForall n (p tup2g1 tup2g2) a
 
 checkExists
   :: (Avs x, Avs a, Avs e, QE a e, SMTDefinable (MVFun (Rep a) SBool))

@@ -23,7 +23,7 @@ import Prelude (print,putStr,(=<<))
 -----------
 
 -- A node identifier (which is just an 'Int').
-data NodeId = NodeId Int deriving (Show,Eq,Ord)
+newtype NodeId = NodeId Int deriving (Show,Eq,Ord)
 -- Declare a symbolic representation for 'NodeId'.
 mkDType "NodeId" ''NodeId
 
