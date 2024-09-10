@@ -8,7 +8,7 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeFamilies #-}
 
-{- | This is a consenus algorithm for a single decision value, similar
+{- | This is a consensus algorithm for a single decision value, similar
    to single-decree Paxos.
 
    The safety property, 'monoValue', ensures that once a node has
