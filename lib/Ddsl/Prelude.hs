@@ -7,6 +7,8 @@ module Ddsl.Prelude
   , module Ddsl.Ext.Map
   , module Ddsl.Ext.Nat
   , module Ddsl.Ext.Set
+  , module Ddsl.Ext.Tree
+  , module Ddsl.Ext.List
   , module Ddsl.Ext.CardSet
   , module Ddsl.Ext.ForallCheck
   , defaultConfig
@@ -66,6 +68,8 @@ import Ddsl.Ext.Nat
 import Ddsl.Ext.Set hiding (filterSet,nonePassSet)
 import Ddsl.Ext.CardSet
 import Ddsl.Ext.ForallCheck
+import Ddsl.Ext.Tree
+import Ddsl.Ext.List
 
 import Data.SBV (SMTDefinable,SBool)
 import Prelude hiding ((==),(/=),(&&),(||),not,(>),(>=))

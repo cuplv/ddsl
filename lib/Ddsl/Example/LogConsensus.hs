@@ -14,6 +14,8 @@ import Ddsl.Prelude
 
 import Prelude (print,putStr,(=<<),Num,String)
 
+import Data.SBV (SBV,mkUninterpretedSort)
+
 -----------
 -- TYPES --
 -----------
@@ -51,7 +53,60 @@ type Votes = Map VoterId NodeId
 -- Declare a symbolic representation for the Votes map.
 mkMapMd "Branch_NodeId_NodeId" ''VoterId ''NodeId
 
+-- | An entry in the log (actually just a 'String')
+newtype Entry = Entry String
+  deriving (Show,Eq,Ord)
+mkDType "Entry" ''Entry
+
 -- | A record of accepts
 type Accepts = Accum (Branch,NodeId) Index
 
-type State = (Voters, Votes, Ktl, AMap)
+-- Tree stuff 
+
+data Log_S
+mkUninterpretedSort ''Log_S
+data LK_S
+mkUninterpretedSort ''LK_S
+data LT_S
+mkUninterpretedSort ''LT_S
+
+instance SingleVal Log_S
+
+type Log = List Index Entry
+
+instance Avs Log where
+  type Rep Log = SBV Log_S
+
+instance Ava Log where
+  type Sv Log = Log_S
+
+instance ListMd Index Entry where
+  data ListWit Index Entry
+  listName _ = "Index__Entry"
+
+instance SingleVal LK_S
+
+type LK = KtKey Branch Index
+
+instance Avs LK where
+  type Rep LK = SBV LK_S
+
+instance Ava LK where
+  type Sv LK = LK_S
+
+instance SingleVal LT_S
+
+type LT = KtTree Branch Index Entry
+
+instance Avs LT where
+  type Rep LT = SBV LT_S
+
+instance Ava LT where
+  type Sv LT = LT_S
+
+type Tree = KtTree Branch Index Entry
+instance KtTreeMd Branch Index Entry where
+  data KtTreeWit Branch Index Entry
+  ktTreeName _ = "KtLog"
+
+type State = (Voters, Votes, Tree, Accepts)

@@ -22,7 +22,7 @@ module Ddsl.Ext.Tree
   ) where
 
 import Ddsl
-import Ddsl.Atom (atomWrapped)
+import Ddsl.Atom
 import Ddsl.Ext.List
 import Ddsl.Ext.Nat
 import Ddsl.Term
