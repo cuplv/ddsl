@@ -57,7 +57,9 @@ module Ddsl.Prelude
   -- , tup5m4
   -- , tup5m5
   , (>)
+  , (<)
   , (>=)
+  , (<=)
   , ite
   ) where
 
@@ -72,7 +74,7 @@ import Ddsl.Ext.Tree
 import Ddsl.Ext.List
 
 import Data.SBV (SMTDefinable,SBool)
-import Prelude hiding ((==),(/=),(&&),(||),not,(>),(>=))
+import Prelude hiding ((==),(/=),(&&),(||),not,(>),(<),(>=),(<=))
 
 not :: (Avs x) => Alp x Bool -> Alp x Bool
 not = notE
@@ -229,8 +231,14 @@ tup4m4 t f =
 (>) :: (NatMd a, Avs x) => Alp x a -> Alp x a -> Alp x Bool
 (>) a b = a $> b
 
+(<) :: (NatMd a, Avs x) => Alp x a -> Alp x a -> Alp x Bool
+(<) a b = a $< b
+
 (>=) :: (NatMd a, Avs x) => Alp x a -> Alp x a -> Alp x Bool
 (>=) a b = a $>= b
+
+(<=) :: (NatMd a, Avs x) => Alp x a -> Alp x a -> Alp x Bool
+(<=) a b = a $<= b
 
 -- ite :: (Avs a) => Dv Bool -> Dv a -> Dv a -> Dv a
 ite :: (Avs a, Avs x) => Alp x Bool -> Alp x a -> Alp x a -> Alp x a

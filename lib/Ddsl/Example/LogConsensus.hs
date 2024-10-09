@@ -252,15 +252,15 @@ rejecterExists uniVals state =
 
 isRejecter :: (Avs x) => Alp x Rejecter -> Alp x (Branch,Index) -> Alp x Voters -> Alp x Accepts -> Alp x Votes -> Alp x Bool
 isRejecter rej uniVals ev accepts votes =
-  (fstE rej $> fstE uniVals)
+  (fstE rej > fstE uniVals)
   && quorum (sndE rej) ev
   && universal "rejects"
         (tup4 rej uniVals accepts votes)
         (\args r ->
          from4' args $ \rej uniVals accepts votes ->
          member r (sndE rej)
-         $=> (notE (upTo (fstE uniVals &&& r) (sndE uniVals) accepts)
-              $/\ notE (keyNullPart (fstE rej &&& r) votes)))
+         ==> (notE (upTo (tup2 (fstE uniVals) r) (sndE uniVals) accepts)
+              && notE (keyNullPart (tup2 (fstE rej) r) votes)))
 
   -- from2' rj $ \rBranch rVoters ->
   -- -- rj is a rejecter for t only if...
@@ -290,3 +290,19 @@ dchange i l1 l2 =
     (lengthKt (fstE l1) > i)
     (notE $ prefixMatchKt i l1 l2)
     (notE $ sublistKt l1 l2)
+
+acceptSup :: (Avs x) => Alp x (Branch,Index) -> Alp x NodeId -> Alp x AcceptE -> Alp x State -> Alp x Bool
+acceptSup uniVals origin effect state =
+  from3' effect $ \aBranch accepter index ->
+  from4' state $ \_ votes tree _ ->
+  from3' tree $ \latestBranch key _ ->
+  andAllA
+    [ accepter == origin
+    , ((index <= lengthKt key) && (aBranch <= latestBranch))
+      || (aBranch < latestBranch)
+    , nonePassMap "acceptSup" (tup2 aBranch origin) votes $
+        \args k _ ->
+        from2' args $ \aBranch origin ->
+        from2' k $ \vBranch voter ->
+        (voter == origin) && (vBranch > aBranch)
+    ]
