@@ -10,6 +10,7 @@ library
     exposed-modules:
         Ddsl.Prelude
         Ddsl.Example.Election
+        Ddsl.Example.LogConsensus
         Ddsl.Example.SingleConsensus
     other-modules:
         Ddsl,
@@ -44,7 +45,8 @@ library
         Ddsl.Ext.Set.Class,
         Ddsl.Ext.Set.Example,
         Ddsl.Ext.Set.Filter,
-        Ddsl.Ext.Set.TH
+        Ddsl.Ext.Set.TH,
+        Ddsl.Ext.Tree
     build-depends:
         base >=4.17.2 && <4.19,
         sbv >=10.7 && <10.13,
