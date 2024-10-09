@@ -130,14 +130,19 @@ votePre origin update state =
   from2' update $ \term cand ->
   -- Check that origin has not yet voted in this term,
   keyNull (tup2 term origin) vs
-  -- and that origin has not yet accepted in this or any future
-  -- term.
-  && (nonePassSet "votePre" (tup2 term origin) as $
-    \args accept ->
-    from2' args $ \vTerm vNode ->
-    from2' accept $ \aTerm aNode ->
-    (aTerm >= vTerm)
-    && (aNode == vNode))
+
+  -- This clause is not needed for verification,
+  -- though removing it seemed to increase verification time
+  -- from ~9min to ~23min.
+  --
+  -- -- and that origin has not yet accepted in this or any future
+  -- -- term.
+  -- && (nonePassSet "votePre" (tup2 term origin) as $
+  --   \args accept ->
+  --   from2' args $ \vTerm vNode ->
+  --   from2' accept $ \aTerm aNode ->
+  --   (aTerm >= vTerm)
+  --   && (aNode == vNode))
 
 -- The effect of Vote updates
 voteEffect :: Df3 NodeId VoteU State State
