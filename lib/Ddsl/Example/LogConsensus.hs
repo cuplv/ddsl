@@ -223,7 +223,8 @@ strongerOrEq uniVals state1 state2 =
   from3' tree2 $ \_ key2 body2 ->
   isCommittedB uniBranch uniIndex accepts1 ev1
   ==> (isCommittedB uniBranch uniIndex accepts2 ev2
-       && prefixMatchKt uniIndex (tup2 key1 body1) (tup2 key2 body2))
+       && prefixMatchKt uniIndex (tup2 key1 body1) (tup2 key2 body2)
+      )
 
 isCommittedB :: (Avs x) => Alp x Branch -> Alp x Index -> Alp x Accepts -> Alp x Voters -> Alp x Bool
 isCommittedB branch index accepts ev =
@@ -233,6 +234,15 @@ isCommittedB branch index accepts ev =
         upTo (tup2 branch voter) index accepts
   in accepters `quorum` ev
 
+-- myLemma :: (Avs x) => Alp x (Branch,Index,State) -> Alp x Bool
+-- myLemma args =
+--   from3' args $ \uniBranch uniIndex state ->
+--   from4' state $ \ev _ tree accepts ->
+--   from3' tree $ \_ key body ->
+--   (focusRule (tup2 uniBranch uniIndex) state
+--   && (lengthKt key < uniIndex))
+--   -- rejecterExists (tup2 uniBranch uniIndex) state
+--   ==> notE (isCommittedB uniBranch uniIndex accepts ev)
 
 ----------------------------
 -- VERIFICATION ARTIFACTS --
@@ -286,11 +296,14 @@ supPropose uniVals origin update state =
     isElected pBranch origin (tup2 ev vs)
     -- and that no invalid accepts exist,
     && acceptRule state
-    -- and that, if the proposal term exceeds the current term, then
-    -- either ...
+    -- and that, if we are bypassing, then the entries we are
+    -- bypassing must be deferred,
     && (((pBranch > latestBranch) && (latestBranch >= uniBranch)
         && dchange uniIndex (tup2 treeHead treeBody) newLog)
        ==> rejecterExists uniVals state)
+    -- and also, if we are not changing the branch, then our key must
+    -- match treeHead, because no-one else can modify our branch.
+    && ((latestBranch == pBranch) ==> (treeHead == pKey))
 
     -- Do we need these?
     && checkKt originLog
@@ -325,7 +338,7 @@ isElected term cand state =
 rejecterExists :: (Avs x) => Alp x (Branch,Index) -> Alp x State -> Alp x Bool
 rejecterExists uniVals state =
   from4' state $ \ev votes _ accepts ->
-  nonePassSet "rejecterExists" (tup4 uniVals ev accepts votes) fullSet $
+  notE $ nonePassSet "rejecterExists" (tup4 uniVals ev accepts votes) fullSet $
     \args e ->
     from4' args $ \ti roll accepts votes ->
     isRejecter e ti roll accepts votes
@@ -390,15 +403,15 @@ vc2 args =
 -- updates.
 vc3Vo :: Df ((Branch,Index), (NodeId, VoteE, State)) Bool
 vc3Vo args =
-  from2' args $ \index ps ->
+  from2' args $ \uni ps ->
   from3' ps $ \origin update state1 ->
   let
     state2 = handleVote update state1
   in
     -- Assume that the update is valid.
-    supVote origin update state1
+    (supVote origin update state1 && invariant uni state1)
     -- Show that the change satisfies the monotonicity property.
-    ==> strongerOrEq index state1 state2
+    ==> (strongerOrEq uni state1 state2 && invariant uni state2)
 
 vc3Pr :: Df ((Branch,Index), (NodeId, ProposeE, State)) Bool
 vc3Pr args =
@@ -407,8 +420,10 @@ vc3Pr args =
   let
     state2 = handlePropose update state1
   in
-    supPropose uni origin update state1
-    ==> strongerOrEq uni state1 state2
+    (supPropose uni origin update state1 && invariant uni state1)
+    ==> (strongerOrEq uni state1 state2
+         -- && invariant uni state2
+        )
 
 vc3Ac :: Df ((Branch,Index), (NodeId, AcceptE, State)) Bool
 vc3Ac args =
@@ -418,8 +433,8 @@ vc3Ac args =
   let
     state2 = handleAccept update state1
   in
-    supAccept origin update state1
-    ==> strongerOrEq uni state1 state2
+    (supAccept origin update state1 && invariant uni state1)
+    ==> (strongerOrEq uni state1 state2 && invariant uni state2)
 
 -- Check that every update's precondition is "strong": that it is
 -- preserved by any other update that is valid
@@ -430,13 +445,14 @@ vc3Ac args =
 -- condition.
 vc4VoVo :: Df ((Branch,Index), (NodeId, VoteE, NodeId, VoteE, State)) Bool
 vc4VoVo args =
-  from2' args $ \_ ps ->
+  from2' args $ \uni ps ->
   from5' ps $ \origin1 update1 origin2 update2 state1 ->
   let
     state2 = handleVote update2 state1
     pre1 = supVote origin1 update1
   in
     (supVote origin2 update2 state1
+    && invariant uni state1
     && (origin1 /= origin2))
     ==> (pre1 state1 ==> pre1 state2)
 
@@ -449,18 +465,20 @@ vc4PrVo args =
     pre1 = supVote origin1 update1
   in
     (supPropose uni origin2 update2 state1
+    && invariant uni state1
     && (origin1 /= origin2))
     ==> (pre1 state1 ==> pre1 state2)
 
 vc4AcVo :: Df ((Branch,Index), (NodeId, VoteE, NodeId, AcceptE, State)) Bool
 vc4AcVo args =
-  from2' args $ \_ ps ->
+  from2' args $ \uni ps ->
   from5' ps $ \origin1 update1 origin2 update2 state1 ->
   let
     state2 = handleAccept update2 state1
     pre1 = supVote origin1 update1
   in
     (supAccept origin2 update2 state1
+    && invariant uni state1
     && (origin1 /= origin2))
     ==> (pre1 state1 ==> pre1 state2)
 
@@ -473,6 +491,7 @@ vc4VoPr args =
     pre1 = supPropose uni origin1 update1
   in
     (supVote origin2 update2 state1
+    && invariant uni state1
     && (origin1 /= origin2))
     ==> (pre1 state1 ==> pre1 state2)
 
@@ -485,6 +504,7 @@ vc4PrPr args =
     pre1 = supPropose uni origin1 update1
   in
     (supPropose uni origin2 update2 state1
+    && invariant uni state1
     && (origin1 /= origin2))
     ==> (pre1 state1 ==> pre1 state2)
 
@@ -497,18 +517,20 @@ vc4AcPr args =
     pre1 = supPropose uni origin1 update1
   in
     (supAccept origin2 update2 state1
+    && invariant uni state1
     && (origin1 /= origin2))
     ==> (pre1 state1 ==> pre1 state2)
 
 vc4VoAc :: Df ((Branch,Index), (NodeId, AcceptE, NodeId, VoteE, State)) Bool
 vc4VoAc args =
-  from2' args $ \_ ps ->
+  from2' args $ \uni ps ->
   from5' ps $ \origin1 update1 origin2 update2 state1 ->
   let
     state2 = handleVote update2 state1
     pre1 = supAccept origin1 update1
   in
     (supVote origin2 update2 state1
+    && invariant uni state1
     && (origin1 /= origin2))
     ==> (pre1 state1 ==> pre1 state2)
 
@@ -521,18 +543,20 @@ vc4PrAc args =
     pre1 = supAccept origin1 update1
   in
     (supPropose uni origin2 update2 state1
+    && invariant uni state1
     && (origin1 /= origin2))
     ==> (pre1 state1 ==> pre1 state2)
 
 vc4AcAc :: Df ((Branch,Index), (NodeId, AcceptE, NodeId, AcceptE, State)) Bool
 vc4AcAc args =
-  from2' args $ \_ ps ->
+  from2' args $ \uni ps ->
   from5' ps $ \origin1 update1 origin2 update2 state1 ->
   let
     state2 = handleAccept update2 state1
     pre1 = supAccept origin1 update1
   in
     (supAccept origin2 update2 state1
+    && invariant uni state1
     && (origin1 /= origin2))
     ==> (pre1 state1 ==> pre1 state2)
 
@@ -542,7 +566,7 @@ vc4AcAc args =
 -- un-ordered, so there are 6 total instances of this condition.
 vc5VoVo :: Df ((Branch,Index), (NodeId, VoteE, NodeId, VoteE, State)) Bool
 vc5VoVo x =
-  from2' x $ \_ args ->
+  from2' x $ \uni args ->
   from5' args $ \origin1 update1 origin2 update2 state ->
   let
     -- The result of applying update1 and then update2.
@@ -557,6 +581,7 @@ vc5VoVo x =
     -- Assume that the updates are valid,
     (supVote origin1 update1 state
     && supVote origin2 update2 state
+    && invariant uni state
     -- and that they are concurrent.
     && (origin1 /= origin2))
     -- Show that the resulting states are identical.
@@ -579,6 +604,7 @@ vc5VoPr x =
     -- Assume that the updates are valid,
     (supVote origin1 update1 state
     && supPropose uni origin2 update2 state
+    && invariant uni state
     -- and that they are concurrent.
     && (origin1 /= origin2))
     -- Show that the resulting states are identical.
@@ -586,7 +612,7 @@ vc5VoPr x =
 
 vc5VoAc :: Df ((Branch,Index), (NodeId, VoteE, NodeId, AcceptE, State)) Bool
 vc5VoAc x =
-  from2' x $ \_ args ->
+  from2' x $ \uni args ->
   from5' args $ \origin1 update1 origin2 update2 state ->
   let
     -- The result of applying update1 and then update2.
@@ -601,6 +627,7 @@ vc5VoAc x =
     -- Assume that the updates are valid,
     (supVote origin1 update1 state
     && supAccept origin2 update2 state
+    && invariant uni state
     -- and that they are concurrent.
     && (origin1 /= origin2))
     -- Show that the resulting states are identical.
@@ -623,6 +650,7 @@ vc5PrPr x =
     -- Assume that the updates are valid,
     (supPropose uni origin1 update1 state
     && supPropose uni origin2 update2 state
+    && invariant uni state
     -- and that they are concurrent.
     && (origin1 /= origin2))
     -- Show that the resulting states are identical.
@@ -645,6 +673,7 @@ vc5PrAc x =
     -- Assume that the updates are valid,
     (supPropose uni origin1 update1 state
     && supAccept origin2 update2 state
+    && invariant uni state
     -- and that they are concurrent.
     && (origin1 /= origin2))
     -- Show that the resulting states are identical.
@@ -652,7 +681,7 @@ vc5PrAc x =
 
 vc5AcAc :: Df ((Branch,Index), (NodeId, AcceptE, NodeId, AcceptE, State)) Bool
 vc5AcAc x =
-  from2' x $ \_ args ->
+  from2' x $ \uni args ->
   from5' args $ \origin1 update1 origin2 update2 state ->
   let
     -- The result of applying update1 and then update2.
@@ -667,6 +696,7 @@ vc5AcAc x =
     -- Assume that the updates are valid,
     (supAccept origin1 update1 state
     && supAccept origin2 update2 state
+    && invariant uni state
     -- and that they are concurrent.
     && (origin1 /= origin2))
     -- Show that the resulting states are identical.
