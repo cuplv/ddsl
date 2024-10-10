@@ -238,6 +238,28 @@ isCommittedB branch index accepts ev =
 -- VERIFICATION ARTIFACTS --
 ----------------------------
 
+invariant :: (Avs x) => Alp x (Branch,Index) -> Alp x State -> Alp x Bool
+invariant uniVals state =
+  from2' uniVals $ \uniBranch uniIndex ->
+  from4' state $ \ev _ tree accepts ->
+  from3' tree $ \_ key body ->
+  acceptRule state
+  && checkKt (tup2 key body)
+  && focusRule uniVals state
+
+focusRule :: (Avs x) => Alp x (Branch,Index) -> Alp x State -> Alp x Bool
+focusRule uniVals state =
+  from2' uniVals $ \uniBranch uniIndex ->
+  from4' state $ \ev _ tree accepts ->
+  from3' tree $ \_ key body ->
+  ((lengthKt key < uniIndex)
+  && notE (rejecterExists uniVals state))
+  ==> ((filterSet "focusRule" (tup3 uniBranch uniIndex accepts) fullSet $
+    \args accepter ->
+    from3' args $ \uniBranch uniIndex accepts ->
+    notE $ upTo (tup2 uniBranch accepter) uniIndex accepts)
+    == fullSet)
+
 -- The precondition for Vote updates
 supVote :: (Avs x) => Alp x NodeId -> Alp x VoteE -> Alp x State -> Alp x Bool
 supVote origin update state =
@@ -352,7 +374,7 @@ supAccept origin effect state =
 vc1 :: Df ((Branch,Index), State) Bool
 vc1 args =
   from2' args $ \index s ->
-  strongerOrEq index s s
+  invariant index s ==> strongerOrEq index s s
 
 -- Check that the monotonicity relation is transitive.
 vc2 :: Df ((Branch,Index), (State, State, State)) Bool
