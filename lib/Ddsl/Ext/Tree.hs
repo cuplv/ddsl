@@ -67,6 +67,7 @@ class
     , SingleVal (Sv (KtKey t i))
     , Ord t
     , Avs t
+    , EqSymbolic (Rep t)
     , ListMd i e
     , Ava (KtKey t i)
     , Ava (KtTree t i e)
@@ -268,6 +269,15 @@ ktTheory w = rule' (zeroNatTheory (ktIndexWit w) <> leNatTheory (ktIndexWit w)) 
     prefixMatchKt i (k1,m1) (k2,m2)
     .=> (le i (length k1)
          .&& le i (length k2))
+
+  -- append for different branches is commutative
+  axiom $ \(t1,(t2,(k1,(k2,(e1,(e2,(m,(m1,(m2,(m3,m4)))))))))) ->
+    (t1 ./= t2
+     .&& append (t1,e1) (k1,m) m1
+     .&& append (t2,e2) (k2,m1) m2
+     .&& append (t2,e2) (k2,m) m3
+     .&& append (t1,e1) (k1,m3) m4)
+    .=> (m2 .== m4)
 
 emptyKt
   :: (Avs x, KtTreeMd t i e)
