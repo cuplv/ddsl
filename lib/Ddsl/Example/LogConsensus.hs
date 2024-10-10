@@ -176,13 +176,44 @@ reactToVote _ self state =
        -- Else, send the vote update
        undefined
 
+--------------
+-- HANDLERS --
+--------------
+
+-- | The handler for Vote updates
+handleVote :: (Avs x) => Alp x VoteE -> Alp x State -> Alp x State
+handleVote effect state =
+  from3' effect $ \branch voter cand ->
+  -- Modify the Votes field ...
+  tup4m2 state $
+    -- ... by inserting the new vote.
+    insertMap (tup2 branch voter) cand
+
+-- | The handler for Propose updates
+handlePropose :: (Avs x) => Alp x ProposeE -> Alp x State -> Alp x State
+handlePropose effect state =
+  from3' effect $ \newKey newBranch entry ->
+  from4' state $ \ev votes tree accepts ->
+  from3' tree $ \oldBranch oldKey treeBody ->
+  let newLog = appendKt (tup2 newBranch entry) (tup2 newKey treeBody)
+  in ite (newBranch >= oldBranch)
+       (tup4 ev votes (tup3 newBranch (fstE newLog) (sndE newLog)) accepts)
+       (tup4 ev votes (tup3 oldBranch oldKey (sndE newLog)) accepts)
+
+-- | The handler for Accept updates
+handleAccept :: (Avs x) => Alp x AcceptE -> Alp x State -> Alp x State
+handleAccept effect state =
+  from3' effect $ \branch accepter index ->
+  tup4m4 state $
+    advance (tup2 branch accepter) index
+
 ------------------
 -- VERIFICATION --
 ------------------
 
 -- The precondition for Vote updates
-votePre :: (Avs x) => Alp x NodeId -> Alp x VoteE -> Alp x State -> Alp x Bool
-votePre origin update state =
+supVote :: (Avs x) => Alp x NodeId -> Alp x VoteE -> Alp x State -> Alp x Bool
+supVote origin update state =
   from4' state $ \_ vs _ _ ->
   from3' update $ \branch voter _ ->
   -- Check that origin has not yet voted in this term,
@@ -192,8 +223,8 @@ votePre origin update state =
 -- The precondition for Propose updates.  Note that this precondition
 -- takes an arbitrary Branch argument, which is universally quantified
 -- in the verification conditions.
-proposePre :: (Avs x) => Alp x (Branch,Index) -> Alp x NodeId -> Alp x ProposeE -> Alp x State -> Alp x Bool
-proposePre uniVals origin update state =
+supPropose :: (Avs x) => Alp x (Branch,Index) -> Alp x NodeId -> Alp x ProposeE -> Alp x State -> Alp x Bool
+supPropose uniVals origin update state =
   from2' uniVals $ \uniBranch uniIndex ->
   from4' state $ \ev vs tree as ->
   from3' tree $ \latestBranch treeHead treeBody ->
@@ -262,28 +293,6 @@ isRejecter rej uniVals ev accepts votes =
          ==> (notE (upTo (tup2 (fstE uniVals) r) (sndE uniVals) accepts)
               && notE (keyNullPart (tup2 (fstE rej) r) votes)))
 
-  -- from2' rj $ \rBranch rVoters ->
-  -- -- rj is a rejecter for t only if...
-  -- --
-  -- -- rj's term is greater than t,
-  -- (rBranch > t)
-  -- -- and rj's voters are a quorum,
-  -- && quorum rVoters ev
-  -- -- and each of rj's voters meet the following conditions:
-  -- --
-  -- -- (this function universally quantifies over all 'NodeId's in the
-  -- -- context of the explicit arguments @(tup4 rj t vs as)@, and so we
-  -- -- had to define the 'QE' quanfier edge at the top of the file)
-  -- && (universal "isRejecter" (tup4 rj t vs as) $
-  --   \args voter ->
-  --   from4' args $ \rj t vs as ->
-  --   from2' rj $ \rBranch rVoters ->
-  --   member voter rVoters ==>
-  --     -- each voter has not accepted term t,
-  --     (not (member (tup2 t voter) as)
-  --     -- and each voter has voted in rj's term.
-  --     && not (keyNullPart (tup2 rBranch voter) vs)))
-
 dchange :: (Avs x) => Alp x Index -> Alp x (Key,Tree) -> Alp x (Key,Tree) -> Alp x Bool
 dchange i l1 l2 =
   iteE
@@ -291,8 +300,8 @@ dchange i l1 l2 =
     (notE $ prefixMatchKt i l1 l2)
     (notE $ sublistKt l1 l2)
 
-acceptSup :: (Avs x) => Alp x (Branch,Index) -> Alp x NodeId -> Alp x AcceptE -> Alp x State -> Alp x Bool
-acceptSup uniVals origin effect state =
+supAccept :: (Avs x) => Alp x (Branch,Index) -> Alp x NodeId -> Alp x AcceptE -> Alp x State -> Alp x Bool
+supAccept uniVals origin effect state =
   from3' effect $ \aBranch accepter index ->
   from4' state $ \_ votes tree _ ->
   from3' tree $ \latestBranch key _ ->
