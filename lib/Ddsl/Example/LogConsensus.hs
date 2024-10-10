@@ -153,6 +153,7 @@ type AcceptE = (Branch, NodeId, Index)
 -- edges, declare all edges in one place in your source file.
 instance QE (Rejecter, (Branch, Index), Accepts, Votes) NodeId
 
+
 -------------
 -- ACTIONS --
 -------------
@@ -175,6 +176,7 @@ reactToVote _ self state =
        undefined
        -- Else, send the vote update
        undefined
+
 
 --------------
 -- HANDLERS --
@@ -207,9 +209,34 @@ handleAccept effect state =
   tup4m4 state $
     advance (tup2 branch accepter) index
 
-------------------
--- VERIFICATION --
-------------------
+
+-----------------------
+-- VERIFICATION SPEC --
+-----------------------
+
+strongerOrEq :: (Avs x) => Alp x (Branch,Index) -> Binrel x State
+strongerOrEq uniVals state1 state2 =
+  from2' uniVals $ \uniBranch uniIndex ->
+  from4' state1 $ \ev1 _ tree1 accepts1 ->
+  from3' tree1 $ \_ key1 body1 ->
+  from4' state2 $ \ev2 _ tree2 accepts2 ->
+  from3' tree2 $ \_ key2 body2 ->
+  isCommittedB uniBranch uniIndex accepts1 ev1
+  ==> (isCommittedB uniBranch uniIndex accepts2 ev2
+       && prefixMatchKt uniIndex (tup2 key1 body1) (tup2 key2 body2))
+
+isCommittedB :: (Avs x) => Alp x Branch -> Alp x Index -> Alp x Accepts -> Alp x Voters -> Alp x Bool
+isCommittedB branch index accepts ev =
+  let accepters = filterSet "isCommittedB" (tup3 branch index accepts) ev $
+        \args voter ->
+        from3' args $ \branch index accepts ->
+        upTo (tup2 branch voter) index accepts
+  in accepters `quorum` ev
+
+
+----------------------------
+-- VERIFICATION ARTIFACTS --
+----------------------------
 
 -- The precondition for Vote updates
 supVote :: (Avs x) => Alp x NodeId -> Alp x VoteE -> Alp x State -> Alp x Bool
@@ -315,3 +342,8 @@ supAccept uniVals origin effect state =
         from2' k $ \vBranch voter ->
         (voter == origin) && (vBranch > aBranch)
     ]
+
+
+-----------------------------
+-- VERIFICATION CONDITIONS --
+-----------------------------
