@@ -46,6 +46,13 @@ type Voters = Set NodeId
 -- Declare a symbolic representation for sets of 'NodeID's.
 mkSetMd "NodeId" ''NodeId
 
+-- | A count for node sets, to determine quorums
+newtype NCount = NCount Int
+  deriving (Show,Eq,Ord)
+  deriving newtype (Num)
+mkNatMd "NCount" ''NCount
+instance CardSetMd NCount NodeId
+
 -- | A voting node in a particular term
 type VoterId = (Branch,NodeId)
 -- | A record of votes
@@ -126,19 +133,29 @@ ktw = ktWit
 lengthKt :: (Avs x) => Alp x Key -> Alp x Index
 lengthKt = lengthKt' ktw
 
+-- | Tree for storing log proposals
 type Tree = KtTree Branch Index Entry
 instance KtTreeMd Branch Index Entry where
   data KtTreeWit Branch Index Entry
   ktTreeName _ = "KtLog"
 
+-- | A Branch + Index in the tree
 type Key = KtKey Branch Index
 
-type State = (Voters, Votes, (Branch, Key, Tree), Accepts)
+-- | The eligible voters/accepters, the voting quorum size, and the
+-- accepting quorum size.
+type QState = (Voters, NCount, NCount)
 
+-- | The main Ferry application state
+type State = (QState, Votes, (Branch, Key, Tree), Accepts)
+
+-- | The Vote effect type
 type VoteE = (Branch,NodeId,NodeId)
 
+-- | The Propose effect type
 type ProposeE = (KtKey Branch Index, Branch, Entry)
 
+-- | The Accept effect type
 type AcceptE = (Branch, NodeId, Index)
 
 -- We declare a single manual quantifier alternaton edge, from the
@@ -225,13 +242,17 @@ strongerOrEq uniVals state1 state2 =
   ==> (isCommittedB uniBranch uniIndex accepts2 ev2
        && prefixMatchKt uniIndex (tup2 key1 body1) (tup2 key2 body2))
 
-isCommittedB :: (Avs x) => Alp x Branch -> Alp x Index -> Alp x Accepts -> Alp x Voters -> Alp x Bool
-isCommittedB branch index accepts ev =
+isCommittedB :: (Avs x) => Alp x Branch -> Alp x Index -> Alp x Accepts -> Alp x (Voters, NCount, NCount) -> Alp x Bool
+isCommittedB branch index accepts qstate =
+  from3' qstate $ \ev _ acceptQ -> 
   let accepters = filterSet "isCommittedB" (tup3 branch index accepts) ev $
         \args voter ->
         from3' args $ \branch index accepts ->
         upTo (tup2 branch voter) index accepts
-  in accepters `quorum` ev
+     -- Check that the number of voters common to the accepter-set and
+     -- eligible-set meets (their intersection) meets or exceeds the
+     -- configured accept-quroum size.
+  in commonCard accepters ev >= acceptQ
 
 
 ----------------------------
@@ -241,11 +262,22 @@ isCommittedB branch index accepts ev =
 invariant :: (Avs x) => Alp x (Branch,Index) -> Alp x State -> Alp x Bool
 invariant uniVals state =
   from2' uniVals $ \uniBranch uniIndex ->
-  from4' state $ \ev _ tree accepts ->
+  from4' state $ \qstate _ tree accepts ->
   from3' tree $ \_ key body ->
   acceptRule state
   && checkKt (tup2 key body)
   && focusRule uniVals state
+  && quorumRule qstate
+
+quorumRule :: (Avs x) => Alp x (Voters, NCount, NCount) -> Alp x Bool
+quorumRule qstate = from3' qstate $ \ev voteQ acceptQ ->
+  let clusterSize = card ev
+     -- clusterSize <= (voteQ + acceptQ)
+  in ltSum clusterSize voteQ acceptQ
+     -- clusterSize <= (acceptQ + acceptQ)
+     && ltSum clusterSize acceptQ acceptQ
+     && (voteQ > acceptQ)
+     && (acceptQ > zero)
 
 focusRule :: (Avs x) => Alp x (Branch,Index) -> Alp x State -> Alp x Bool
 focusRule uniVals state =
@@ -275,7 +307,7 @@ supVote origin update state =
 supPropose :: (Avs x) => Alp x (Branch,Index) -> Alp x NodeId -> Alp x ProposeE -> Alp x State -> Alp x Bool
 supPropose uniVals origin update state =
   from2' uniVals $ \uniBranch uniIndex ->
-  from4' state $ \ev vs tree as ->
+  from4' state $ \qstate vs tree as ->
   from3' tree $ \latestBranch treeHead treeBody ->
   from3' update $ \pKey pBranch pEntry ->
   let
@@ -283,7 +315,7 @@ supPropose uniVals origin update state =
     newLog = appendKt (tup2 pBranch pEntry) originLog
   in
     -- Check that origin is elected for the proposal term,
-    isElected pBranch origin (tup2 ev vs)
+    isElected pBranch origin qstate vs
     -- and that no invalid accepts exist,
     && acceptRule state
     -- and that, if the proposal term exceeds the current term, then
@@ -314,26 +346,28 @@ acceptRule state =
      (tup3 latestBranch (lengthKt key) accepts)
      fullSet
 
-isElected :: (Avs x) => Alp x Branch -> Alp x NodeId -> Alp x (Voters, Votes) -> Alp x Bool
-isElected term cand state =
-  from2' state $ \allVoters allVotes ->
-  -- Check that the set of nodes that have voted for cand in term
-  -- is a quorum of the eligible voters.
-  selectFst term (selectV cand allVotes) `quorum` allVoters
+isElected :: (Avs x) => Alp x Branch -> Alp x NodeId -> Alp x (Voters, NCount, NCount) -> Alp x Votes -> Alp x Bool
+isElected term cand qstate allVotes =
+  from3' qstate $ \allVoters voteQ _ ->
+  -- Check that the number of nodes are both eligible and have voted
+  -- for cand in term satisfies the configured vote-quorum.
+  commonCard (selectFst term $ selectV cand allVotes) allVoters
+  >= voteQ
 
 -- Check that a Rejecter witness exists for the given Branch.
 rejecterExists :: (Avs x) => Alp x (Branch,Index) -> Alp x State -> Alp x Bool
 rejecterExists uniVals state =
-  from4' state $ \ev votes _ accepts ->
-  nonePassSet "rejecterExists" (tup4 uniVals ev accepts votes) fullSet $
+  from4' state $ \qstate votes _ accepts ->
+  from3' qstate $ \ev voteQ _ ->
+  nonePassSet "rejecterExists" (tup5 uniVals ev accepts votes voteQ) fullSet $
     \args e ->
-    from4' args $ \ti roll accepts votes ->
-    isRejecter e ti roll accepts votes
+    from5' args $ \ti roll accepts votes voteQ ->
+    isRejecter e ti roll accepts votes voteQ
 
-isRejecter :: (Avs x) => Alp x Rejecter -> Alp x (Branch,Index) -> Alp x Voters -> Alp x Accepts -> Alp x Votes -> Alp x Bool
-isRejecter rej uniVals ev accepts votes =
+isRejecter :: (Avs x) => Alp x Rejecter -> Alp x (Branch,Index) -> Alp x Voters -> Alp x Accepts -> Alp x Votes -> Alp x NCount -> Alp x Bool
+isRejecter rej uniVals ev accepts votes voteQ =
   (fstE rej > fstE uniVals)
-  && quorum (sndE rej) ev
+  && (commonCard (sndE rej) ev >= voteQ)
   && universal "rejects"
         (tup4 rej uniVals accepts votes)
         (\args r ->
