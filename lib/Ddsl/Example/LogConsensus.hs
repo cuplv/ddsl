@@ -86,58 +86,12 @@ mkSetMd "AcceptRuleSet" ''AcceptRule
 
 -- Tree stuff 
 
-data Log_S
-mkUninterpretedSort ''Log_S
-data LK_S
-mkUninterpretedSort ''LK_S
-data LT_S
-mkUninterpretedSort ''LT_S
-
-instance SingleVal Log_S
-
 type Log = List Index Entry
-
-instance Avs Log where
-  type Rep Log = SBV Log_S
-
-instance Ava Log where
-  type Sv Log = Log_S
-
-instance ListMd Index Entry where
-  data ListWit Index Entry
-  listName _ = "Index__Entry"
-
-instance SingleVal LK_S
-
-type LK = KtKey Branch Index
-
-instance Avs LK where
-  type Rep LK = SBV LK_S
-
-instance Ava LK where
-  type Sv LK = LK_S
-
-instance SingleVal LT_S
-
-type LT = KtTree Branch Index Entry
-
-instance Avs LT where
-  type Rep LT = SBV LT_S
-
-instance Ava LT where
-  type Sv LT = LT_S
-
-ktw :: KtTreeWit Branch Index Entry
-ktw = ktWit
-
-lengthKt :: (Avs x) => Alp x Key -> Alp x Index
-lengthKt = lengthKt' ktw
+mkListMd "Log" ''Index ''Entry
 
 -- | Tree for storing log proposals
 type Tree = KtTree Branch Index Entry
-instance KtTreeMd Branch Index Entry where
-  data KtTreeWit Branch Index Entry
-  ktTreeName _ = "KtLog"
+mkKtTreeMd "LogTree" ''Branch ''Index ''Entry
 
 -- | A Branch + Index in the tree
 type Key = KtKey Branch Index
