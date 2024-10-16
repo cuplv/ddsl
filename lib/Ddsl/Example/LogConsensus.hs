@@ -25,13 +25,13 @@ newtype NodeId = NodeId Int deriving (Show,Eq,Ord)
 -- Declare an opaque symbolic representation for 'NodeId'.
 mkDType "NodeId" ''NodeId
 
--- | A term (also just an 'Int').
+-- | A branch (also just an 'Int').
 newtype Branch = Branch Int
   deriving (Show,Eq,Ord)
   deriving newtype (Num)
 -- Declare a symbolic representation, with Nat operations, for 'Branch'.
 mkNatMd "Branch" ''Branch
--- We'll reason about sets of terms, so we declare this as well.
+-- We'll reason about sets of branchs, so we declare this as well.
 mkSetMd "Branch" ''Branch
 
 -- | An index (also just an 'Int').
@@ -53,7 +53,7 @@ newtype NCount = NCount Int
 mkNatMd "NCount" ''NCount
 instance CardSetMd NCount NodeId
 
--- | A voting node in a particular term
+-- | A voting node in a particular branch
 type VoterId = (Branch,NodeId)
 -- | A record of votes
 type Votes = Map VoterId NodeId
@@ -70,16 +70,16 @@ mkDType "Entry" ''Entry
 type Accepts = Accum (Branch,NodeId) Index
 mkAccumMd "Branch_NodeId_Index" ''VoterId ''Index
 
--- A 'Rejecter' is a witness that certain terms' values can no longer
+-- A 'Defer' is a witness that certain branches' values can no longer
 -- be accepted.  It consists of a quorum-size 'Voters' set and a
--- 'Term' that they have all voted in.  This means that the voters are
--- not allowed to make new accepts for any older term, and so any
--- older term that none have accepted can no longer gather a quorum of
+-- 'Branch' that they have all voted in.  This means that the voters are
+-- not allowed to make new accepts for any older branch, and so any
+-- older branch that none have accepted can no longer gather a quorum of
 -- accepters.
-type Rejecter = (Branch, Voters)
+type Defer = (Branch, Voters)
 -- This is required for the 'nonePassSet' quantification in
 -- 'rejecterExists'.
-mkSetMd "Rejecter" ''Rejecter
+mkSetMd "Defer" ''Defer
 
 type AcceptRule = ((Branch, Index), NodeId)
 mkSetMd "AcceptRuleSet" ''AcceptRule
@@ -168,31 +168,64 @@ type AcceptE = (Branch, NodeId, Index)
 -- checked for conflicts: as far as I know, doing so is not possible
 -- with Haskell's typeclass system.  To avoid defining conflicting
 -- edges, declare all edges in one place in your source file.
-instance QE (Rejecter, (Branch, Index), Accepts, Votes) NodeId
+instance QE (Defer, (Branch, Index), Accepts, Votes) NodeId
 
 
 -------------
 -- ACTIONS --
 -------------
 
-startCampaign :: (Avs x) => Alp x () -> Alp x NodeId -> Alp x State -> Alp x ((Bool,VoteE),())
-startCampaign _ self state =
-  -- Get the next branch higher than seen in any existing votes
-  let myBranch = undefined
-  in tup2 (tup2 trueE (tup3 myBranch self self)) unitE
+-- These are called by application code to modify the state.
+--
+-- An action can can "fail", in which case it returns False
+-- along with the update message (idiomatic Haskell code would return
+-- a Maybe type).  Actions are verified to only successfully
+-- produce an update when the local state satisfies that update's SUP.
 
-reactToVote :: (Avs x) => Alp x () -> Alp x NodeId -> Alp x State -> Alp x ((Bool,VoteE),())
-reactToVote _ self state =  
-  let -- Get the highest branch that has been voted for,
-      -- and an arbitrary candidate that has received that vote.
-      highestVote = undefined
-      -- Check if we have voted in it yet
-      iVoted = undefined
-  in ite iVoted
-       -- If true, don't send the vote update
-       undefined
-       -- Else, send the vote update
-       undefined
+-- An action takes the local node's ID, state, and some arguments:
+-- in this case, the branch and candidate to vote for.
+voteGen :: (Avs x) => Alp x NodeId -> Alp x State -> Alp x (Branch,NodeId) -> Alp x (Bool, VoteE)
+voteGen self state args =
+  from4' state $ \_ votes _ _ ->
+  -- Generator is successful when the local node has not voted yet
+  -- (according to its local state).
+  keyNull (tup2 (fstE args) self) votes
+  -- Generated update uses local node ID as the voter ID.
+  &&& (tup3 (fstE args) self (sndE args))
+
+-- The propose generator takes a proposal branch and entry as args.
+proposeGen :: (Avs x) => Alp x NodeId -> Alp x State -> Alp x (Branch,Entry) -> Alp x (Bool, ProposeE)
+proposeGen self state args =
+  from4' state $ \ev votes tree _ ->
+  from3' tree $ \_ key body ->
+  from2' args $ \branch entry ->
+
+  -- This succeeds when the local node is elected for the argument branch.
+  isElected branch self ev votes
+  -- The generated update appends the new entry in the first index
+  -- that the local node considers empty.
+  &&& tup3 key branch entry
+
+-- The accept generator takes no special arguments.
+acceptGen :: (Avs x) => Alp x NodeId -> Alp x State -> Alp x () -> Alp x (Bool,AcceptE)
+acceptGen self state _ =
+  from4' state $ \ev votes tree accepts ->
+  from3' tree $ \branch key body ->
+  -- letb (getTerm state) $ \term ->
+  -- letb (getLogLength state) $ \index ->
+
+  -- It requires that the local node has not yet voted for any term
+  -- greater than the current log term.
+  nonePassMap "acceptGen" (tup2 branch self) votes
+    (\args k _ ->
+     from2' args $ \myBranch myNid ->
+     from2' k $ \voteBranch voter ->
+     (myNid $== voter)
+     $/\ (voteBranch $> myBranch))
+
+  -- The update records an accept for the highest-witnessed index in
+  -- the current log term.
+  &&& tup3 branch self (lengthKt key)
 
 
 --------------
@@ -367,7 +400,7 @@ isElected term cand qstate allVotes =
   commonCard (selectFst term $ selectV cand allVotes) allVoters
   >= voteQ
 
--- Check that a Rejecter witness exists for the given Branch.
+-- Check that a Defer witness exists for the given Branch.
 rejecterExists :: (Avs x) => Alp x (Branch,Index) -> Alp x State -> Alp x Bool
 rejecterExists uniVals state =
   from4' state $ \qstate votes _ accepts ->
@@ -375,10 +408,10 @@ rejecterExists uniVals state =
   notE $ nonePassSet "rejecterExists" (tup5 uniVals ev accepts votes voteQ) fullSet $
     \args e ->
     from5' args $ \ti roll accepts votes voteQ ->
-    isRejecter e ti roll accepts votes voteQ
+    isDefer e ti roll accepts votes voteQ
 
-isRejecter :: (Avs x) => Alp x Rejecter -> Alp x (Branch,Index) -> Alp x Voters -> Alp x Accepts -> Alp x Votes -> Alp x NCount -> Alp x Bool
-isRejecter rej uniVals ev accepts votes voteQ =
+isDefer :: (Avs x) => Alp x Defer -> Alp x (Branch,Index) -> Alp x Voters -> Alp x Accepts -> Alp x Votes -> Alp x NCount -> Alp x Bool
+isDefer rej uniVals ev accepts votes voteQ =
   (fstE rej > fstE uniVals)
   && (commonCard (sndE rej) ev >= voteQ)
   && universal "rejects"
