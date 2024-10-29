@@ -48,7 +48,9 @@ library
         Ddsl.Ext.Set.Example,
         Ddsl.Ext.Set.Filter,
         Ddsl.Ext.Set.TH,
-        Ddsl.Ext.Tree
+        Ddsl.Ext.Tree,
+        Ddsl.Ext.Tree.Class,
+        Ddsl.Ext.Tree.TH
     build-depends:
         base >=4.17.2 && <4.19,
         sbv >=10.7 && <10.13,
