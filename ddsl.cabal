@@ -11,6 +11,7 @@ library
         Ddsl.Prelude
         Ddsl.Example.Election
         Ddsl.Example.LogConsensus
+        Ddsl.Example.LogConsensus.VC
         Ddsl.Example.SingleConsensus
     other-modules:
         Ddsl,

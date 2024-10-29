@@ -93,6 +93,12 @@ mkListMd "Log" ''Index ''Entry
 type Tree = KtTree Branch Index Entry
 mkKtTreeMd "LogTree" ''Branch ''Index ''Entry
 
+ktw :: KtTreeWit Branch Index Entry
+ktw = ktWit
+
+lengthKt :: (Avs x) => Alp x Key -> Alp x Index
+lengthKt = lengthKt' ktw
+
 -- | A Branch + Index in the tree
 type Key = KtKey Branch Index
 
