@@ -35,9 +35,9 @@ vc3Vo args =
     state2 = handleVote update state1
   in
     -- Assume that the update is valid.
-    (supVote origin update state1 && integrity uni state1)
+    (supVote uni origin update state1)
     -- Show that the change satisfies the monotonicity property.
-    ==> (strongerOrEq uni state1 state2 && integrity uni state2)
+    ==> (strongerOrEq uni state1 state2)
 
 vc3Pr :: Df ((Branch,Index), (NodeId, ProposeE, State)) Bool
 vc3Pr args =
@@ -46,10 +46,8 @@ vc3Pr args =
   let
     state2 = handlePropose update state1
   in
-    (supPropose uni origin update state1 && integrity uni state1)
-    ==> (strongerOrEq uni state1 state2
-         -- && integrity uni state2
-        )
+    (supPropose uni origin update state1)
+    ==> (strongerOrEq uni state1 state2)
 
 vc3Ac :: Df ((Branch,Index), (NodeId, AcceptE, State)) Bool
 vc3Ac args =
@@ -59,8 +57,8 @@ vc3Ac args =
   let
     state2 = handleAccept update state1
   in
-    (supAccept origin update state1 && integrity uni state1)
-    ==> (strongerOrEq uni state1 state2 && integrity uni state2)
+    (supAccept uni origin update state1)
+    ==> (strongerOrEq uni state1 state2)
 
 -- Check that every update's precondition is "strong": that it is
 -- preserved by any other update that is valid
@@ -75,10 +73,9 @@ vc4VoVo args =
   from5' ps $ \origin1 update1 origin2 update2 state1 ->
   let
     state2 = handleVote update2 state1
-    pre1 = supVote origin1 update1
+    pre1 = supVote uni origin1 update1
   in
-    (supVote origin2 update2 state1
-    && integrity uni state1
+    (supVote uni origin2 update2 state1
     && (origin1 /= origin2))
     ==> (pre1 state1 ==> pre1 state2)
 
@@ -88,10 +85,9 @@ vc4PrVo args =
   from5' ps $ \origin1 update1 origin2 update2 state1 ->
   let
     state2 = handlePropose update2 state1
-    pre1 = supVote origin1 update1
+    pre1 = supVote uni origin1 update1
   in
     (supPropose uni origin2 update2 state1
-    && integrity uni state1
     && (origin1 /= origin2))
     ==> (pre1 state1 ==> pre1 state2)
 
@@ -101,10 +97,9 @@ vc4AcVo args =
   from5' ps $ \origin1 update1 origin2 update2 state1 ->
   let
     state2 = handleAccept update2 state1
-    pre1 = supVote origin1 update1
+    pre1 = supVote uni origin1 update1
   in
-    (supAccept origin2 update2 state1
-    && integrity uni state1
+    (supAccept uni origin2 update2 state1
     && (origin1 /= origin2))
     ==> (pre1 state1 ==> pre1 state2)
 
@@ -116,8 +111,7 @@ vc4VoPr args =
     state2 = handleVote update2 state1
     pre1 = supPropose uni origin1 update1
   in
-    (supVote origin2 update2 state1
-    && integrity uni state1
+    (supVote uni origin2 update2 state1
     && (origin1 /= origin2))
     ==> (pre1 state1 ==> pre1 state2)
 
@@ -130,7 +124,6 @@ vc4PrPr args =
     pre1 = supPropose uni origin1 update1
   in
     (supPropose uni origin2 update2 state1
-    && integrity uni state1
     && (origin1 /= origin2))
     ==> (pre1 state1 ==> pre1 state2)
 
@@ -142,8 +135,7 @@ vc4AcPr args =
     state2 = handleAccept update2 state1
     pre1 = supPropose uni origin1 update1
   in
-    (supAccept origin2 update2 state1
-    && integrity uni state1
+    (supAccept uni origin2 update2 state1
     && (origin1 /= origin2))
     ==> (pre1 state1 ==> pre1 state2)
 
@@ -153,10 +145,9 @@ vc4VoAc args =
   from5' ps $ \origin1 update1 origin2 update2 state1 ->
   let
     state2 = handleVote update2 state1
-    pre1 = supAccept origin1 update1
+    pre1 = supAccept uni origin1 update1
   in
-    (supVote origin2 update2 state1
-    && integrity uni state1
+    (supVote uni origin2 update2 state1
     && (origin1 /= origin2))
     ==> (pre1 state1 ==> pre1 state2)
 
@@ -166,10 +157,9 @@ vc4PrAc args =
   from5' ps $ \origin1 update1 origin2 update2 state1 ->
   let
     state2 = handlePropose update2 state1
-    pre1 = supAccept origin1 update1
+    pre1 = supAccept uni origin1 update1
   in
     (supPropose uni origin2 update2 state1
-    && integrity uni state1
     && (origin1 /= origin2))
     ==> (pre1 state1 ==> pre1 state2)
 
@@ -179,10 +169,9 @@ vc4AcAc args =
   from5' ps $ \origin1 update1 origin2 update2 state1 ->
   let
     state2 = handleAccept update2 state1
-    pre1 = supAccept origin1 update1
+    pre1 = supAccept uni origin1 update1
   in
-    (supAccept origin2 update2 state1
-    && integrity uni state1
+    (supAccept uni origin2 update2 state1
     && (origin1 /= origin2))
     ==> (pre1 state1 ==> pre1 state2)
 
@@ -205,9 +194,8 @@ vc5VoVo x =
         (handleVote update2 state)
   in
     -- Assume that the updates are valid,
-    (supVote origin1 update1 state
-    && supVote origin2 update2 state
-    && integrity uni state
+    (supVote uni origin1 update1 state
+    && supVote uni origin2 update2 state
     -- and that they are concurrent.
     && (origin1 /= origin2))
     -- Show that the resulting states are identical.
@@ -228,9 +216,8 @@ vc5VoPr x =
         (handlePropose update2 state)
   in
     -- Assume that the updates are valid,
-    (supVote origin1 update1 state
+    (supVote uni origin1 update1 state
     && supPropose uni origin2 update2 state
-    && integrity uni state
     -- and that they are concurrent.
     && (origin1 /= origin2))
     -- Show that the resulting states are identical.
@@ -251,9 +238,8 @@ vc5VoAc x =
         (handleAccept update2 state)
   in
     -- Assume that the updates are valid,
-    (supVote origin1 update1 state
-    && supAccept origin2 update2 state
-    && integrity uni state
+    (supVote uni origin1 update1 state
+    && supAccept uni origin2 update2 state
     -- and that they are concurrent.
     && (origin1 /= origin2))
     -- Show that the resulting states are identical.
@@ -276,7 +262,6 @@ vc5PrPr x =
     -- Assume that the updates are valid,
     (supPropose uni origin1 update1 state
     && supPropose uni origin2 update2 state
-    && integrity uni state
     -- and that they are concurrent.
     && (origin1 /= origin2))
     -- Show that the resulting states are identical.
@@ -298,8 +283,7 @@ vc5PrAc x =
   in
     -- Assume that the updates are valid,
     (supPropose uni origin1 update1 state
-    && supAccept origin2 update2 state
-    && integrity uni state
+    && supAccept uni origin2 update2 state
     -- and that they are concurrent.
     && (origin1 /= origin2))
     -- Show that the resulting states are identical.
@@ -320,15 +304,13 @@ vc5AcAc x =
         (handleAccept update2 state)
   in
     -- Assume that the updates are valid,
-    (supAccept origin1 update1 state
-    && supAccept origin2 update2 state
-    && integrity uni state
+    (supAccept uni origin1 update1 state
+    && supAccept uni origin2 update2 state
     -- and that they are concurrent.
     && (origin1 /= origin2))
     -- Show that the resulting states are identical.
     ==> (state12 == state21)
 
--- On my machine, verification took about 9 minutes.
 verifyLogConsensus = do
   putStr "VC #1 (reflexive).            "
   print =<< verify vc1                  
