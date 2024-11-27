@@ -380,6 +380,48 @@ vc6Ac x =
     -- Show that the resulting state satisfies integrity
     ==> integrity uni state2
 
+vc7Vo :: Df ((Branch,Index), (NodeId, State), (Branch, NodeId)) Bool
+vc7Vo x =
+  from3' x $ \uni context args ->
+  from2' context $ \origin state ->
+  let
+    result = voteAction origin state args
+  in
+    from2' result $ \success update ->
+    -- Assume that action returns an update
+    (integrity uni state
+     && success)
+    -- Show that update's SUP is satisfied
+    ==> supVote uni origin update state
+
+vc7Pr :: Df ((Branch,Index), (NodeId, State), (Branch, Entry)) Bool
+vc7Pr x =
+  from3' x $ \uni context args ->
+  from2' context $ \origin state ->
+  let
+    result = proposeAction origin state args
+  in
+    from2' result $ \success update ->
+    -- Assume that action returns an update
+    (integrity uni state
+     && success)
+    -- Show that update's SUP is satisfied
+    ==> supPropose uni origin update state
+
+vc7Ac :: Df ((Branch,Index), (NodeId, State), ()) Bool
+vc7Ac x =
+  from3' x $ \uni context args ->
+  from2' context $ \origin state ->
+  let
+    result = acceptAction origin state args
+  in
+    from2' result $ \success update ->
+    -- Assume that action returns an update
+    (integrity uni state
+     && success)
+    -- Show that update's SUP is satisfied
+    ==> supAccept uni origin update state
+
 verifyLogConsensus = do
   putStr "VC #1 (reflexive).            "
   print =<< verify vc1                  
@@ -391,23 +433,23 @@ verifyLogConsensus = do
   print =<< verify vc3Pr                
   putStr "VC #3[Ac] (monotonic).        "
   print =<< verify vc3Ac              
-  putStr "VC #4[Vo → Vo] (strong).      "
+  putStr "VC #4[Vo → Vo] (stable).      "
   print =<< verify   vc4VoVo            
-  putStr "VC #4[Vo → Pr] (strong).      "
+  putStr "VC #4[Vo → Pr] (stable).      "
   print =<< verify   vc4VoPr            
-  putStr "VC #4[Vo → Ac] (strong).      "
+  putStr "VC #4[Vo → Ac] (stable).      "
   print =<< verify   vc4VoAc            
-  putStr "VC #4[Pr → Vo] (strong).      "
+  putStr "VC #4[Pr → Vo] (stable).      "
   print =<< verify   vc4PrVo            
-  putStr "VC #4[Pr → Pr] (strong).      "
+  putStr "VC #4[Pr → Pr] (stable).      "
   print =<< verify   vc4PrPr            
-  putStr "VC #4[Pr → Ac] (strong).      "
+  putStr "VC #4[Pr → Ac] (stable).      "
   print =<< verify   vc4PrAc            
-  putStr "VC #4[Ac → Vo] (strong).      "
+  putStr "VC #4[Ac → Vo] (stable).      "
   print =<< verify   vc4AcVo            
-  putStr "VC #4[Ac → Pr] (strong).      "
+  putStr "VC #4[Ac → Pr] (stable).      "
   print =<< verify   vc4AcPr            
-  putStr "VC #4[Ac → Ac] (strong).      "
+  putStr "VC #4[Ac → Ac] (stable).      "
   print =<< verify   vc4AcAc
   putStr "VC #5[Vo ⇆ Vo] (commutable).  "
   print =<< verify   vc5VoVo
@@ -427,3 +469,9 @@ verifyLogConsensus = do
   print =<< verify vc6Pr                
   putStr "VC #6[Ac] (integrity).        "
   print =<< verify vc6Ac              
+  putStr "VC #7[Vo] (action).        "
+  print =<< verify vc7Vo                
+  putStr "VC #7[Pr] (action).        "
+  print =<< verify vc7Pr                
+  putStr "VC #7[Ac] (action).        "
+  print =<< verify vc7Ac              
