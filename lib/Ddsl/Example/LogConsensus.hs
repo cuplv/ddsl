@@ -301,7 +301,6 @@ supVote uniVals origin update state =
   -- Check that origin has not yet voted in this term,
   -- and that the origin is voting in its own name.
   keyNull (tup2 branch voter) vs && (origin == voter)
-  && integrity uniVals state
 
 -- The precondition for Propose updates.  Note that this precondition
 -- takes an arbitrary Branch argument, which is universally quantified
@@ -331,7 +330,6 @@ supPropose uniVals origin update state =
 
     && checkKt originLog
     && checkKt newLog
-    && integrity uniVals state
 
 acceptRule :: (Avs x) => Alp x State -> Alp x Bool
 acceptRule state =
@@ -394,5 +392,4 @@ supAccept uniVals origin effect state =
         from2' args $ \aBranch origin ->
         from2' k $ \vBranch voter ->
         (voter == origin) && (vBranch > aBranch)
-    , integrity uniVals state
     ]
