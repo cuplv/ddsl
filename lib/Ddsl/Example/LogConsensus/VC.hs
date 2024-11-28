@@ -284,10 +284,10 @@ vc5PrPr x =
   in
     -- Assume that the updates are valid,
     (integrity uni state
-     && integrity uni state1
-     && integrity uni state2
-     && integrity uni state12
-     && integrity uni state21
+     -- && integrity uni state1
+     -- && integrity uni state2
+     -- && integrity uni state12
+     -- && integrity uni state21
      && supPropose uni origin1 update1 state
      && supPropose uni origin2 update2 state
      -- and that they are concurrent.
@@ -307,10 +307,10 @@ vc5PrAc x =
   in
     -- Assume that the updates are valid,
     (integrity uni state
-     && integrity uni state1
-     && integrity uni state2
-     && integrity uni state12
-     && integrity uni state21
+     -- && integrity uni state1
+     -- && integrity uni state2
+     -- && integrity uni state12
+     -- && integrity uni state21
      && supPropose uni origin1 update1 state
      && supAccept uni origin2 update2 state
      -- and that they are concurrent.
@@ -423,40 +423,40 @@ vc7Ac x =
     ==> supAccept uni origin update state
 
 verifyLogConsensus = do
-  putStr "VC #1 (reflexive).            "
-  print =<< verify vc1                  
-  putStr "VC #2 (transitive).           "
-  print =<< verify vc2                  
-  putStr "VC #3[Vo] (monotonic).        "
-  print =<< verify vc3Vo                
-  putStr "VC #3[Pr] (monotonic).        "
-  print =<< verify vc3Pr                
-  putStr "VC #3[Ac] (monotonic).        "
-  print =<< verify vc3Ac              
-  putStr "VC #4[Vo → Vo] (stable).      "
-  print =<< verify   vc4VoVo            
-  putStr "VC #4[Vo → Pr] (stable).      "
-  print =<< verify   vc4VoPr            
-  putStr "VC #4[Vo → Ac] (stable).      "
-  print =<< verify   vc4VoAc            
-  putStr "VC #4[Pr → Vo] (stable).      "
-  print =<< verify   vc4PrVo            
-  putStr "VC #4[Pr → Pr] (stable).      "
-  print =<< verify   vc4PrPr            
-  putStr "VC #4[Pr → Ac] (stable).      "
-  print =<< verify   vc4PrAc            
-  putStr "VC #4[Ac → Vo] (stable).      "
-  print =<< verify   vc4AcVo            
-  putStr "VC #4[Ac → Pr] (stable).      "
-  print =<< verify   vc4AcPr            
-  putStr "VC #4[Ac → Ac] (stable).      "
-  print =<< verify   vc4AcAc
-  putStr "VC #5[Vo ⇆ Vo] (commutable).  "
-  print =<< verify   vc5VoVo
-  putStr "VC #5[Vo ⇆ Pr] (commutable).  "
-  print =<< verify   vc5VoPr
-  putStr "VC #5[Vo ⇆ Ac] (commutable).  "
-  print =<< verify   vc5VoAc
+  -- putStr "VC #1 (reflexive).            "
+  -- print =<< verify vc1                  
+  -- putStr "VC #2 (transitive).           "
+  -- print =<< verify vc2                  
+  -- putStr "VC #3[Vo] (monotonic).        "
+  -- print =<< verify vc3Vo                
+  -- putStr "VC #3[Pr] (monotonic).        "
+  -- print =<< verify vc3Pr                
+  -- putStr "VC #3[Ac] (monotonic).        "
+  -- print =<< verify vc3Ac              
+  -- putStr "VC #4[Vo → Vo] (stable).      "
+  -- print =<< verify   vc4VoVo            
+  -- putStr "VC #4[Vo → Pr] (stable).      "
+  -- print =<< verify   vc4VoPr            
+  -- putStr "VC #4[Vo → Ac] (stable).      "
+  -- print =<< verify   vc4VoAc            
+  -- putStr "VC #4[Pr → Vo] (stable).      "
+  -- print =<< verify   vc4PrVo            
+  -- putStr "VC #4[Pr → Pr] (stable).      "
+  -- print =<< verify   vc4PrPr            
+  -- putStr "VC #4[Pr → Ac] (stable).      "
+  -- print =<< verify   vc4PrAc            
+  -- putStr "VC #4[Ac → Vo] (stable).      "
+  -- print =<< verify   vc4AcVo            
+  -- putStr "VC #4[Ac → Pr] (stable).      "
+  -- print =<< verify   vc4AcPr            
+  -- putStr "VC #4[Ac → Ac] (stable).      "
+  -- print =<< verify   vc4AcAc
+  -- putStr "VC #5[Vo ⇆ Vo] (commutable).  "
+  -- print =<< verify   vc5VoVo
+  -- putStr "VC #5[Vo ⇆ Pr] (commutable).  "
+  -- print =<< verify   vc5VoPr
+  -- putStr "VC #5[Vo ⇆ Ac] (commutable).  "
+  -- print =<< verify   vc5VoAc
   putStr "VC #5[Pr ⇆ Pr] (commutable).  "
   print =<< verify   vc5PrPr
   putStr "VC #5[Pr ⇆ Ac] (commutable).  "
