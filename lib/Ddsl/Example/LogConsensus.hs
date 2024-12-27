@@ -11,6 +11,7 @@
 module Ddsl.Example.LogConsensus where
 
 import Ddsl.Prelude
+import SuperV
 
 import Prelude (print,putStr,(=<<),Num,String,undefined)
 
@@ -393,3 +394,17 @@ supAccept uniVals origin effect state =
         from2' k $ \vBranch voter ->
         (voter == origin) && (vBranch > aBranch)
     ]
+
+mkVCs
+  -- Updates
+  [("Vote", 'supVote, 'handleVote)
+  ,("Accept", 'supAccept, 'handleAccept)
+  ]
+  -- Update-generating actions
+  [("Vote", 'voteAction)
+  ,("Accept", 'acceptAction)
+  ]
+  -- Local integrity condition
+  'integrity
+  -- Decision strength relation
+  'strongerOrEq

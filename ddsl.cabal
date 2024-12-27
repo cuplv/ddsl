@@ -51,7 +51,8 @@ library
         Ddsl.Ext.Set.TH,
         Ddsl.Ext.Tree,
         Ddsl.Ext.Tree.Class,
-        Ddsl.Ext.Tree.TH
+        Ddsl.Ext.Tree.TH,
+        SuperV
     build-depends:
         base >=4.17.2 && <4.19,
         sbv >=10.7 && <10.13,
