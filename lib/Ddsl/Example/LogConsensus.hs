@@ -397,12 +397,9 @@ supAccept uniVals origin effect state =
 
 mkVCs
   -- Updates
-  [("Vote", 'supVote, 'handleVote)
-  ,("Accept", 'supAccept, 'handleAccept)
-  ]
-  -- Update-generating actions
-  [("Vote", 'voteAction)
-  ,("Accept", 'acceptAction)
+  [("Vote", 'supVote, 'handleVote, 'voteAction)
+  ,("Propose", 'supPropose, 'handlePropose, 'proposeAction)
+  ,("Accept", 'supAccept, 'handleAccept, 'acceptAction)
   ]
   -- Local integrity condition
   'integrity

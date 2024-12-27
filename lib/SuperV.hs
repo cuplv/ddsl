@@ -6,7 +6,10 @@ import Prelude (print,putStr,putStrLn,(=<<),undefined,return,String,(++),map,con
 
 import Ddsl.Prelude
 
-import Data.SBV (SBV)
+-- import Data.SBV (SBV)
+import Data.Time.Clock
+import Data.Time.Format
+import Data.Time.Format.ISO8601
 import Language.Haskell.TH
 
 
@@ -84,7 +87,7 @@ vc4 integrity sup handle args =
     ==> integrity uni state2
 
 -- Check that every update is stable
-vc5 -- :: Df ((Branch,Index), (NodeId, VoteE, NodeId, VoteE, State)) Bool
+vc5
   :: (Avs x, Avs u, Avs s, Avs i, Avs e1, Avs e2)
   => (Alp x u -> Alp x s -> Alp x Bool)
   -> (Alp x u -> Alp x i -> Alp x e1 -> Alp x s -> Alp x Bool)
@@ -108,7 +111,7 @@ vc5 integrity sup1 sup2 handle1 handle2 args =
     ==> pre1 state2
 
 -- Check that every pair of valid updates commute.
-vc6 -- :: Df ((Branch,Index), (NodeId, VoteE, NodeId, VoteE, State)) Bool
+vc6
   :: (Avs x, Avs u, Avs s, Avs i, Avs e1, Avs e2)
   => (Alp x u -> Alp x s -> Alp x Bool)
   -> (Alp x u -> Alp x i -> Alp x e1 -> Alp x s -> Alp x Bool)
@@ -139,6 +142,26 @@ vc6 integrity sup1 sup2 handle1 handle2 x =
     -- Show that the resulting states are identical.
     ==> (state12 == state21)
 
+-- Check that actions respect SUPs
+vc7
+  :: (Avs x, Avs u, Avs s, Avs i, Avs e, Avs a)
+  => (Alp x u -> Alp x s -> Alp x Bool)
+  -> (Alp x u -> Alp x i -> Alp x e -> Alp x s -> Alp x Bool)
+  -> (Alp x i -> Alp x s -> Alp x a -> Alp x (Bool, e))
+  -> Alp x (u,(i,s),a)
+  -> Alp x Bool
+vc7 integrity sup action x =
+  from3' x $ \uni context args ->
+  from2' context $ \origin state ->
+  let
+    result = action origin state args
+  in
+    from2' result $ \success update ->
+    -- Assume that action returns an update
+    (integrity uni state
+     && success)
+    -- Show that update's SUP is satisfied
+    ==> sup uni origin update state
 
 allOrderedPairs :: [a] -> [(a,a)]
 allOrderedPairs [] = []
@@ -154,12 +177,11 @@ myPrint :: (Show a) => a -> IO ()
 myPrint a = putStrLn $ "    " ++ show a
 
 mkVCs
-  :: [(String,Name,Name)] -- ^ Handlers and SUPs
-  -> [(String,Name)] -- ^ Actions
+  :: [(String,Name,Name,Name)] -- ^ (Update name, SUP, handler, generating action)
   -> Name -- ^ Integrity
   -> Name -- ^ Strength relation
   -> Q [Dec]
-mkVCs updates acts integrity strongerOrEq = do
+mkVCs updates integrity strongerOrEq = do
   c1 <- [d|checkVC1' :: SolverConfig -> IO ()
            checkVC1' conf = do
              putStrLn "VC #1 (strength is reflexive) ..."
@@ -175,7 +197,7 @@ mkVCs updates acts integrity strongerOrEq = do
            checkVC2 = checkVC2' mempty
         |]
   let
-    mkVC3 (name, sup, handle) =
+    mkVC3 (name, sup, handle, _) =
       [ noBindS [|putStrLn $ "VC #3 (" ++ $(litE $ stringL name) ++ " is strength-monotonic) ..."|]
       , noBindS [|myPrint =<< verify' conf (vc3 $(varE integrity) $(varE strongerOrEq) $(varE sup) $(varE handle))|]
       ]
@@ -186,7 +208,7 @@ mkVCs updates acts integrity strongerOrEq = do
         |]
 
   let
-    mkVC4 (name, sup, handle) =
+    mkVC4 (name, sup, handle, _) =
       [ noBindS [|putStrLn $ "VC #4 (" ++ $(litE $ stringL name) ++ " preserves local integrity) ..."|]
       , noBindS [|myPrint =<< verify' conf (vc4 $(varE integrity) $(varE sup) $(varE handle))|]
       ]
@@ -197,7 +219,7 @@ mkVCs updates acts integrity strongerOrEq = do
         |]
 
   let
-    mkVC5 ((name1,sup1,handle1),(name2, sup2, handle2)) =
+    mkVC5 ((name1,sup1,handle1, _),(name2, sup2, handle2, _)) =
       [ noBindS [|putStrLn $ "VC #5 (" ++ $(litE $ stringL name1) ++ " is stable over " ++ $(litE $ stringL name2) ++ ") ..."|]
       , noBindS [|myPrint =<< verify' conf (vc5 $(varE integrity) $(varE sup1) $(varE sup2) $(varE handle1) $(varE handle2))|]
       ]
@@ -208,7 +230,7 @@ mkVCs updates acts integrity strongerOrEq = do
         |]
 
   let
-    mkVC6 ((name1,sup1,handle1),(name2, sup2, handle2)) =
+    mkVC6 ((name1,sup1,handle1, _),(name2, sup2, handle2, _)) =
       [ noBindS [|putStrLn $ "VC #6 (" ++ $(litE $ stringL name1) ++ " and " ++ $(litE $ stringL name2) ++ " commute) ..."|]
       , noBindS [|myPrint =<< verify' conf (vc6 $(varE integrity) $(varE sup1) $(varE sup2) $(varE handle1) $(varE handle2))|]
       ]
@@ -218,15 +240,37 @@ mkVCs updates acts integrity strongerOrEq = do
            checkVC6 = checkVC6' mempty
         |]
 
+  let
+    mkVC7 (name, sup, _, action) =
+      [ noBindS [|putStrLn $ "VC #7 (the " ++ $(litE $ stringL name) ++ "-generating action ensures SUP) ..."|]
+      , noBindS [|myPrint =<< verify' conf (vc7 $(varE integrity) $(varE sup) $(varE action))|]
+      ]
+  c7 <- [d|checkVC7' :: SolverConfig -> IO ()
+           checkVC7' conf = $(doE (concat (map mkVC7 updates)))
+           checkVC7 :: IO ()
+           checkVC7 = checkVC7' mempty
+        |]
+
   cAll <- [d|checkAllVCs' :: SolverConfig -> IO ()
              checkAllVCs' conf = do
+               t0 <- getCurrentTime
+               putStrLn $
+                 "Verification started at: "
+                 ++ iso8601Show t0
+                 ++ " (UTC)"
                checkVC1' conf
                checkVC2' conf
                checkVC3' conf
                checkVC4' conf
                checkVC5' conf
                checkVC6' conf
+               checkVC7' conf
+               t1 <- getCurrentTime
+               let elapsed = diffUTCTime t1 t0
+               putStrLn $
+                 "Total time: "
+                 ++ formatTime defaultTimeLocale "%3Ess" elapsed
              checkAllVCs :: IO ()
              checkAllVCs = checkAllVCs' mempty
           |]
-  return $ concat [c1,c2,c3,c4,c5,c6,cAll]
+  return $ concat [c1,c2,c3,c4,c5,c6,c7,cAll]
