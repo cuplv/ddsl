@@ -8,11 +8,7 @@ maintainer:         contact@octalsrc.org
 
 library
     exposed-modules:
-        Ddsl.Prelude
-        Ddsl.Example.Election
-        Ddsl.Example.LogConsensus
-        Ddsl.Example.LogConsensus.VC
-        Ddsl.Example.SingleConsensus
+        SuperV
     other-modules:
         Ddsl,
         Ddsl.Atom,
@@ -52,7 +48,11 @@ library
         Ddsl.Ext.Tree,
         Ddsl.Ext.Tree.Class,
         Ddsl.Ext.Tree.TH,
-        SuperV
+        Ddsl.Prelude,
+        Ddsl.Example.Election,
+        Ddsl.Example.LogConsensus,
+        Ddsl.Example.LogConsensus.VC,
+        Ddsl.Example.SingleConsensus
     build-depends:
         base >=4.17.2 && <4.19,
         sbv >=10.7 && <10.13,
