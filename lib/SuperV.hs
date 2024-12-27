@@ -1,6 +1,9 @@
 {-# LANGUAGE TemplateHaskell #-}
 
-module SuperV where
+module SuperV
+  ( mkVCs
+  , module Ddsl.Prelude
+  ) where
 
 import Prelude (print,putStr,putStrLn,(=<<),undefined,return,String,(++),map,concat,Maybe (..),mempty)
 

@@ -10,12 +10,9 @@
 
 module Ddsl.Example.LogConsensus where
 
-import Ddsl.Prelude
+import Prelude (Num,String)
+
 import SuperV
-
-import Prelude (print,putStr,(=<<),Num,String,undefined)
-
-import Data.SBV (SBV,mkUninterpretedSort)
 
 -----------
 -- TYPES --
