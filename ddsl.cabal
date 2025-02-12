@@ -8,7 +8,10 @@ maintainer:         contact@octalsrc.org
 
 library
     exposed-modules:
-        SuperV
+        SuperV,
+        Ddsl.Example.Election,
+        Ddsl.Example.LogConsensus,
+        Ddsl.Example.SingleConsensus
     other-modules:
         Ddsl,
         Ddsl.Atom,
@@ -48,17 +51,44 @@ library
         Ddsl.Ext.Tree,
         Ddsl.Ext.Tree.Class,
         Ddsl.Ext.Tree.TH,
-        Ddsl.Prelude,
-        Ddsl.Example.Election,
-        Ddsl.Example.LogConsensus,
-        Ddsl.Example.LogConsensus.VC,
-        Ddsl.Example.SingleConsensus
+        Ddsl.Prelude
     build-depends:
         base >=4.17.2 && <4.19,
         sbv >=10.7 && <10.13,
         containers,
+        store,
         syb,
         time,
         template-haskell
     hs-source-dirs:   lib
     default-language: Haskell2010
+
+executable ferry
+    hs-source-dirs: ferry
+    default-language: Haskell2010
+    main-is: Main.hs
+    other-modules:
+        Config,
+        Config.New,
+        ClientComm,
+        ClientComm.Protocol,
+        ClientComm.Transport,
+        State,
+        AppState
+    build-depends:
+        aeson,
+        base >=4.17.2 && <4.19,
+        ddsl,
+        ccmsg >=1.0 && <1.1,
+        bytestring,
+        cereal,
+        mtl,
+        microlens-platform,
+        network-simple,
+        containers,
+        random,
+        stm,
+        store,
+        text,
+        time,
+        unix,

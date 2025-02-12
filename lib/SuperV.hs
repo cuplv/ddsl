@@ -1,4 +1,12 @@
+{-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE DerivingStrategies #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TypeFamilies #-}
 
 module SuperV
   ( mkVCs
@@ -9,12 +17,11 @@ import Prelude (print,putStr,putStrLn,(=<<),undefined,return,String,(++),map,con
 
 import Ddsl.Prelude
 
--- import Data.SBV (SBV)
 import Data.Time.Clock
 import Data.Time.Format
 import Data.Time.Format.ISO8601
+import Data.Word (Word32)
 import Language.Haskell.TH
-
 
 -- Check that the monotonicity relation is reflexive.
 vc1
