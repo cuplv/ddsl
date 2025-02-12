@@ -1,5 +1,5 @@
 cabal-version:      2.4
-name:               ddsl
+name:               super-v
 version:            0.1.0.0
 license:            MIT
 license-file:       LICENSE
