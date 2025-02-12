@@ -9,7 +9,7 @@ import State
 import AppState
 
 import qualified SuperV
-import Ddsl.Example.LogConsensus
+import SuperV.Example.LogConsensus
 
 
 import Control.Concurrent (forkIO)

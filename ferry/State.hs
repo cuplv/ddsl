@@ -7,8 +7,8 @@ import qualified ClientComm as CC
 import Config
 
 import qualified SuperV as SuperV
-import Ddsl.Example.LogConsensus hiding (NodeId)
-import qualified Ddsl.Example.LogConsensus as Core
+import SuperV.Example.LogConsensus hiding (NodeId)
+import qualified SuperV.Example.LogConsensus as Core
 -- import Lang.Rail.Ext.Accum
 -- import Lang.Rail.Ext.KeyTree
 -- import Lang.Rail.Ext.List

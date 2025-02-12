@@ -1,6 +1,6 @@
 module ClientComm.Protocol where
 
-import Ddsl.Example.LogConsensus (NodeId (..))
+import SuperV.Example.LogConsensus (NodeId (..))
 
 import Control.Concurrent.STM (TQueue)
 import qualified Data.ByteString as SBS

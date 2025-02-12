@@ -1,3 +1,5 @@
+-- The following GHC language extensions are used to create symbolic
+-- representations of the types in this example.
 {-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE DerivingStrategies #-}
@@ -8,7 +10,7 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeFamilies #-}
 
-module Ddsl.Example.LogConsensus where
+module SuperV.Example.LogConsensus where
 
 import Data.Word (Word32)
 import Data.Store
@@ -33,7 +35,7 @@ newtype Branch = Branch Word32
   deriving newtype (Num)
 -- Declare a symbolic representation, with Nat operations, for 'Branch'.
 mkNatMd "Branch" ''Branch
--- We'll reason about sets of branchs, so we declare this as well.
+-- We'll reason about sets of branches, so we declare this as well.
 mkSetMd "Branch" ''Branch
 makeStore ''Branch
 
@@ -65,12 +67,14 @@ mkSetMd "Branch_NodeId" ''VoterId
 -- Declare a symbolic representation for the Votes map.
 mkMapMd "Branch_NodeId_NodeId" ''VoterId ''NodeId
 
--- | An entry in the log (actually just a 'String')
+-- | An entry in the log (just a 'String')
 newtype Entry = Entry String
   deriving (Show,Eq,Ord)
 mkDType "Entry" ''Entry
+makeStore ''Entry
 
--- | A record of accepts
+-- | A record of accepts that a node has seen. The 'Accum' structure
+-- is a map with a limited interface.
 type Accepts = Accum (Branch,NodeId) Index
 mkAccumMd "Branch_NodeId_Index" ''VoterId ''Index
 
@@ -82,19 +86,21 @@ mkAccumMd "Branch_NodeId_Index" ''VoterId ''Index
 -- accepters.
 type Defer = (Branch, Voters)
 -- This is required for the 'nonePassSet' quantification in
--- 'rejecterExists'.
+-- 'deferExists', which considers sets of Defer objects.
 mkSetMd "Defer" ''Defer
 
 type AcceptRule = ((Branch, Index), NodeId)
 mkSetMd "AcceptRuleSet" ''AcceptRule
 
--- Tree stuff 
+-- Tree stuff
 
+-- | A 'Log' is a list of 'Entry's, which uses 'Index' to identify
+-- positions in the log.
 type Log = List Index Entry
 mkListMd "Log" ''Index ''Entry
-makeStore ''Entry
 
--- | Tree for storing log proposals
+-- | Tree for storing log proposals, which uses 'Branch' as branch
+-- identifiers and 'Index' as position identifiers within each branch.
 type Tree = KtTree Branch Index Entry
 mkKtTreeMd "LogTree" ''Branch ''Index ''Entry
 
@@ -113,7 +119,7 @@ type Key = KtKey Branch Index
 -- accepting quorum size.
 type QState = (Voters, NCount, NCount)
 
--- | The main Ferry application state
+-- | The main application state
 type NodeState = (QState, Votes, (Branch, Key, Tree), Accepts)
 
 -- | The Vote effect type
@@ -144,53 +150,65 @@ instance QE (Defer, (Branch, Index), Accepts, Votes) NodeId
 
 -- These are called by application code to modify the state.
 --
--- An action can can "fail", in which case it returns False
--- along with the update message (idiomatic Haskell code would return
--- a Maybe type).  Actions are verified to only successfully
--- produce an update when the local state satisfies that update's SUP.
+-- An action can can "fail", in which case it returns False along with
+-- the update message (idiomatic Haskell code would return a Maybe
+-- type).  Actions are verified to only successfully produce an update
+-- when the local state satisfies that update's Stable Update
+-- Precondition (SUP).
 
 -- An action takes the local node's ID, state, and some arguments:
 -- in this case, the branch and candidate to vote for.
 voteAction :: (Avs x) => Alp x NodeId -> Alp x NodeState -> Alp x (Branch,NodeId) -> Alp x (Bool, VoteE)
 voteAction self state args =
+  -- Unpack the state tuple using from4', binding its vote-map field
+  -- as "votes".  The DSL's special representation of values prevents
+  -- the use of idiomatic Haskell pattern-matching deconstruction.
   from4' state $ \_ votes _ _ ->
-  -- Action is successful when the local node has not voted yet
-  -- (according to its local state).
-  keyNull (tup2 (fstE args) self) votes
-  -- Uses local node ID as the voter ID.
-  &&& (tup3 (fstE args) self (sndE args))
+  -- Unpack the arguments: the branch that a leader is being elected
+  -- for, and the candidate that is being voted for.
+  from2' args $ \branch cand -> 
+  -- Return a two-tuple, consisting of...
+  tup2
+    -- Action is successful when the local node has not voted yet
+    -- (according to its local state).
+    (keyNull (tup2 (fstE args) self) votes)
+    -- Vote update value, using local node ID as the voter ID
+    (tup3 branch self cand)
 
 -- The propose action takes a proposal branch and entry as args.
 proposeAction :: (Avs x) => Alp x NodeId -> Alp x NodeState -> Alp x (Branch,Entry) -> Alp x (Bool, ProposeE)
 proposeAction self state args =
   from4' state $ \ev votes tree _ ->
-  from3' tree $ \_ key body ->
+  from3' tree $ \_ key _ ->
   from2' args $ \branch entry ->
+  tup2
+    -- This succeeds when the local node is elected for the argument branch.
+    (isElected branch self ev votes)
+    -- The generated update appends the new entry in the first index
+    -- that the local node considers empty, indicated by 'key'.
+    (tup3 key branch entry)
 
-  -- This succeeds when the local node is elected for the argument branch.
-  isElected branch self ev votes
-  -- The generated update appends the new entry in the first index
-  -- that the local node considers empty.
-  &&& tup3 key branch entry
-
--- The accept generator takes no special arguments.
+-- The accept action takes no special arguments.
 acceptAction :: (Avs x) => Alp x NodeId -> Alp x NodeState -> Alp x () -> Alp x (Bool,AcceptE)
 acceptAction self state _ =
   from4' state $ \ev votes tree accepts ->
   from3' tree $ \branch key body ->
 
-  -- It requires that the local node has not yet voted for any branch
-  -- greater than the current branch.
-  nonePassMap "acceptAction" (tup2 branch self) votes
-    (\args k _ ->
-     from2' args $ \myBranch myNid ->
-     from2' k $ \voteBranch voter ->
-     (myNid $== voter)
-     $/\ (voteBranch $> myBranch))
+  tup2
+    -- It requires that the local node has not yet voted for any branch
+    -- greater than the current branch.  This expression checks that no
+    -- member of the "votes" set satisfies the predicate defined by the
+    -- the given lambda expression.
+    (nonePassMap "acceptAction" (tup2 branch self) votes
+      (\args k _ ->
+       from2' args $ \myBranch myNid ->
+       from2' k $ \voteBranch voter ->
+       (myNid $== voter)
+       $/\ (voteBranch $> myBranch)))
 
-  -- The update records an accept for the highest-witnessed index in
-  -- the current branch.
-  &&& tup3 branch self (lengthKt key)
+    -- The update records an accept for the highest-witnessed index in
+    -- the current branch.
+    (tup3 branch self (lengthKt key))
 
 
 --------------
@@ -212,26 +230,37 @@ handlePropose effect state =
   from3' effect $ \newKey newBranch entry ->
   from4' state $ \ev votes tree accepts ->
   from3' tree $ \oldBranch oldKey treeBody ->
-  let newLog = appendKt (tup2 newBranch entry) (tup2 newKey treeBody)
+  -- Create the new tree by appending the new entry at the given
+  -- branch and index.
+  let newTree = appendKt (tup2 newBranch entry) (tup2 newKey treeBody)
+  -- Return a state containing the new tree.  If the given branch
+  -- meets or exceeds the existing highest-branch, the head/key of the
+  -- tree is updated to point to the new entry---otherwise, the
+  -- head/key remains unchanged.
   in ite (newBranch >= oldBranch)
-       (tup4 ev votes (tup3 newBranch (fstE newLog) (sndE newLog)) accepts)
-       (tup4 ev votes (tup3 oldBranch oldKey (sndE newLog)) accepts)
+       (tup4 ev votes (tup3 newBranch (fstE newTree) (sndE newTree)) accepts)
+       (tup4 ev votes (tup3 oldBranch oldKey (sndE newTree)) accepts)
 
 -- | The handler for Accept updates
 handleAccept :: (Avs x) => Alp x AcceptE -> Alp x NodeState -> Alp x NodeState
 handleAccept effect state =
   from3' effect $ \branch accepter index ->
   tup4m4 state $
+    -- Increase the accepted index for the accepter and branch to the
+    -- given value (or leave it unchanged if it was already higher).
     advance (tup2 branch accepter) index
 
 isElected :: (Avs x) => Alp x Branch -> Alp x NodeId -> Alp x (Voters, NCount, NCount) -> Alp x Votes -> Alp x Bool
 isElected term cand qstate allVotes =
   from3' qstate $ \allVoters voteQ _ ->
-  -- Check that the number of nodes are both eligible and have voted
-  -- for cand in term satisfies the configured vote-quorum.
+  -- Check that the number of nodes, which are both eligible and have
+  -- voted for cand in term, satisfies the configured vote-quorum
+  -- threshold.
   commonCard (selectFst term $ selectV cand allVotes) allVoters
   >= voteQ
 
+-- Check if the given index has a quorum of accepts for the given
+-- branch.
 isCommittedB :: (Avs x) => Alp x Branch -> Alp x Index -> Alp x Accepts -> Alp x (Voters, NCount, NCount) -> Alp x Bool
 isCommittedB branch index accepts qstate =
   from3' qstate $ \ev _ acceptQ -> 
@@ -258,22 +287,12 @@ getAccepts s =
 getQState :: (Avs x) => Alp x NodeState -> Alp x QState
 getQState s = from4' s $ \q _ _ _ -> q
 
-getRoll :: (Avs x) => Alp x NodeState -> Alp x (Set NodeId)
-getRoll s =
-  from4' s $ \q _ _ _ ->
-  from3' q $ \roll _ _ ->
-  roll
-
-getProposeQ :: (Avs x) => Alp x NodeState -> Alp x NCount
-getProposeQ s =
-  from4' s $ \q _ _ _ ->
-  from3' q $ \_ _ pq ->
-  pq
-
 -----------------------
 -- VERIFICATION SPEC --
 -----------------------
 
+-- True if any committed log in the first state is also committed in
+-- the second state.
 strongerOrEq :: (Avs x) => Alp x (Branch,Index) -> Binrel x NodeState
 strongerOrEq uniVals state1 state2 =
   from2' uniVals $ \uniBranch uniIndex ->
@@ -290,7 +309,8 @@ strongerOrEq uniVals state1 state2 =
 -- VERIFICATION ARTIFACTS --
 ----------------------------
 
--- An integrity invariant on node states, which every SUP assumes
+-- An integrity invariant on node states.  Our verification conditions
+-- will check that every update preserves this condition.
 integrity :: (Avs x) => Alp x (Branch,Index) -> Alp x NodeState -> Alp x Bool
 integrity uniVals state =
   from2' uniVals $ \uniBranch uniIndex ->
@@ -319,14 +339,14 @@ focusRule uniVals state =
   from4' state $ \ev _ tree accepts ->
   from3' tree $ \_ key body ->
   ((lengthKt key < uniIndex)
-  && notE (rejecterExists uniVals state))
+  && notE (deferExists uniVals state))
   ==> ((filterSet "focusRule" (tup3 uniBranch uniIndex accepts) fullSet $
     \args accepter ->
     from3' args $ \uniBranch uniIndex accepts ->
     notE $ upTo (tup2 uniBranch accepter) uniIndex accepts)
     == fullSet)
 
--- The precondition for Vote updates
+-- The stable precondition for Vote updates
 supVote :: (Avs x) => Alp x (Branch,Index) -> Alp x NodeId -> Alp x VoteE -> Alp x NodeState -> Alp x Bool
 supVote uniVals origin update state =
   from4' state $ \_ vs _ _ ->
@@ -335,9 +355,9 @@ supVote uniVals origin update state =
   -- and that the origin is voting in its own name.
   keyNull (tup2 branch voter) vs && (origin == voter)
 
--- The precondition for Propose updates.  Note that this precondition
--- takes an arbitrary Branch argument, which is universally quantified
--- in the verification conditions.
+-- The stable precondition for Propose updates.  Note that this
+-- precondition takes an arbitrary Branch argument, which is
+-- universally quantified in the verification conditions.
 supPropose :: (Avs x) => Alp x (Branch,Index) -> Alp x NodeId -> Alp x ProposeE -> Alp x NodeState -> Alp x Bool
 supPropose uniVals origin update state =
   from2' uniVals $ \uniBranch uniIndex ->
@@ -356,14 +376,16 @@ supPropose uniVals origin update state =
     -- bypassing must be deferred,
     && (((pBranch > latestBranch) && (latestBranch >= uniBranch)
         && bypass uniIndex (tup2 treeHead treeBody) newLog)
-       ==> rejecterExists uniVals state)
+       ==> deferExists uniVals state)
     -- and also, if we are not changing the branch, then our key must
     -- match treeHead, because no-one else can modify our branch.
     && ((latestBranch == pBranch) ==> (treeHead == pKey))
 
+    -- Check that the old and new logs are well-formed
     && checkKt originLog
     && checkKt newLog
 
+-- Check that no accepts exist for non-existent entries.
 acceptRule :: (Avs x) => Alp x NodeState -> Alp x Bool
 acceptRule state =
   from4' state $ \_ _ tree accepts ->
@@ -383,26 +405,30 @@ acceptRule state =
      fullSet
 
 -- Check that a Defer witness exists for the given Branch.
-rejecterExists :: (Avs x) => Alp x (Branch,Index) -> Alp x NodeState -> Alp x Bool
-rejecterExists uniVals state =
+deferExists :: (Avs x) => Alp x (Branch,Index) -> Alp x NodeState -> Alp x Bool
+deferExists uniVals state =
   from4' state $ \qstate votes _ accepts ->
   from3' qstate $ \ev voteQ _ ->
-  notE $ nonePassSet "rejecterExists" (tup5 uniVals ev accepts votes voteQ) fullSet $
+  notE $ nonePassSet "deferExists" (tup5 uniVals ev accepts votes voteQ) fullSet $
     \args e ->
     from5' args $ \ti roll accepts votes voteQ ->
     isDefer e ti roll accepts votes voteQ
 
 isDefer :: (Avs x) => Alp x Defer -> Alp x (Branch,Index) -> Alp x Voters -> Alp x Accepts -> Alp x Votes -> Alp x NCount -> Alp x Bool
-isDefer rej uniVals ev accepts votes voteQ =
-  (fstE rej > fstE uniVals)
-  && (commonCard (sndE rej) ev >= voteQ)
-  && universal "rejects"
-        (tup4 rej uniVals accepts votes)
+isDefer def uniVals ev accepts votes voteQ =
+  (fstE def > fstE uniVals)
+  && (commonCard (sndE def) ev >= voteQ)
+  -- Check that every member of the defer object has indeed committed
+  -- to not accept the given branch and index (by voting in a higher
+  -- branch election).  This is a universal quantification over
+  -- 'NodeIds', for the predicate defined by the lambda expression.
+  && universal "defers"
+        (tup4 def uniVals accepts votes)
         (\args r ->
-         from4' args $ \rej uniVals accepts votes ->
-         member r (sndE rej)
+         from4' args $ \def uniVals accepts votes ->
+         member r (sndE def)
          ==> (notE (upTo (tup2 (fstE uniVals) r) (sndE uniVals) accepts)
-              && notE (keyNullPart (tup2 (fstE rej) r) votes)))
+              && notE (keyNullPart (tup2 (fstE def) r) votes)))
 
 bypass :: (Avs x) => Alp x Index -> Alp x (Key,Tree) -> Alp x (Key,Tree) -> Alp x Bool
 bypass i l1 l2 =
@@ -416,6 +442,7 @@ supAccept uniVals origin effect state =
   from3' effect $ \aBranch accepter index ->
   from4' state $ \_ votes tree _ ->
   from3' tree $ \latestBranch key _ ->
+  -- Check that all conditions in the list are true.
   andAllA
     [ accepter == origin
     , ((index <= lengthKt key) && (aBranch <= latestBranch))
@@ -427,13 +454,22 @@ supAccept uniVals origin effect state =
         (voter == origin) && (vBranch > aBranch)
     ]
 
+-- This Template Haskell command generates the verification conditions
+-- needed to verify that concurrent updates commute, and that each
+-- node is individually monotonic with respect to the strength
+-- ordering.  Together, these two conditions ensure consensus safety
+-- for the committed-log decision.
+--
+-- When this module is loaded in GHCI, the function 'checkAllVCs' will
+-- query an SMT solver (CVC5) for each verification condition in
+-- sequence, printing the results.
 mkVCs
-  -- Updates
+  -- Updates (name, SUP, handler, generating action)
   [("Vote", 'supVote, 'handleVote, 'voteAction)
   ,("Propose", 'supPropose, 'handlePropose, 'proposeAction)
   ,("Accept", 'supAccept, 'handleAccept, 'acceptAction)
   ]
   -- Local integrity condition
   'integrity
-  -- Decision strength relation
+  -- Strength ordering, defining the safety goal
   'strongerOrEq

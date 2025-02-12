@@ -9,9 +9,8 @@ maintainer:         contact@octalsrc.org
 library
     exposed-modules:
         SuperV,
-        Ddsl.Example.Election,
-        Ddsl.Example.LogConsensus,
-        Ddsl.Example.SingleConsensus
+        SuperV.Example.Election,
+        SuperV.Example.LogConsensus
     other-modules:
         Ddsl,
         Ddsl.Atom,

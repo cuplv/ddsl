@@ -10,8 +10,8 @@ import State
 
 import SuperV (Alp,Avs)
 import qualified SuperV
-import Ddsl.Example.LogConsensus hiding (NodeId)
-import qualified Ddsl.Example.LogConsensus as Core
+import SuperV.Example.LogConsensus hiding (NodeId)
+import qualified SuperV.Example.LogConsensus as Core
 
 import Control.Concurrent (forkIO,threadDelay)
 import Control.Concurrent.STM
